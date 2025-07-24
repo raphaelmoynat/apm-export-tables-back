@@ -40,9 +40,8 @@ IMPORT_SCRIPTS = {
     'dwh.mv_permanent': ['import_contact.py permanent'], 
     'dwh.mv_referent': ['import_contact.py referent'],
     'dwh.mv_adherent': ['import_contact.py adherent'],
-    'dwh.mv_participation': ['import_participation.py'],
     'dwh.mv_societe': ['import_societe.py'],
-    'dwh.mv_evt': ["import_event_custom.py", "import_event_marketing.py"], # ← Liste !
+    'dwh.mv_evt': ["import_event_custom.py", "import_event_marketing.py"],
 }
 
 def clean_exports_directory():
