@@ -1,0 +1,22 @@
+tables:
+  regions : dwh.mv_region
+  clubs : dwh.mv_club
+  societes : dwh.mv_societe
+  adherents : dwh.mv_adherent
+  # animateurs : dwh.mv_animateur
+  experts : dwh.mv_expert
+  permanents : dwh.mv_permanent
+  referents : dwh.mv_referent
+  participations : dwh.mv_participation
+  evenements : dwh.mv_evt
+  evaluations : dwh.mv_evaluation
+  expertises : dwh.mv_expertise
+  questions : dwh.mv_question
+  questionnaires : dwh.mv_questionnaire
+  ass_qstr_qst : dwh.questionnaire_question
+  ass_evt_clb : dwh.event_club
+  ass_evt_exp : dwh.event_expert
+  ass_evt_exps : dwh.event_expertise
+  ass_evt_ogz : dwh.event_organizer
+  ass_exp_exps : dwh.expert_expertise
+  sollicitation: dwh.mv_sollicitation

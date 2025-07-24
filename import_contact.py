@@ -1,0 +1,227 @@
+from dotenv import load_dotenv
+import pandas as pd
+import os
+import requests
+import json
+from datetime import datetime
+import sys
+from country_converter import CountryConverter  
+
+load_dotenv()
+
+# config 
+output_dir = 'filtered'
+HUBSPOT_API_KEY = os.getenv("HUBSPOT_TOKEN")
+HUBSPOT_IMPORT_API_URL = 'https://api.hubapi.com/crm/v3/imports'
+
+# configuration pour les 4 types
+FILE_TYPES = {
+    'expert': {'pk': 'PKExpert', 'hubspot_pk': 'pk_expert', 'profil_apm': 'Expert'},
+    'permanent': {'pk': 'PKPermanent', 'hubspot_pk': 'pk_permanent', 'profil_apm': 'Permanent'}, 
+    'referent': {'pk': 'PKReferent', 'hubspot_pk': 'pk_referent', 'profil_apm': 'Référent'},
+    'adherent': {'pk': 'PKAdherent', 'hubspot_pk': 'pk_adherent', 'profil_apm': 'Adhérent'}
+}
+
+
+
+# colonnes communes
+BASE_COLUMNS = [
+    'Email', 'Civilite', 'Nom', 'Prenom', 'Tel', 'Portable',
+    'Pays', 'Ville', 'CP', 'Adresse', 'Nationalite', 'Date_naissance',
+    'FlagCoordinateur', 'FlagExpert', 'FlagAnimateur', 
+    'FlagPermanent', 'FlagReferent', 'FlagActif',
+    'subscriber_info__status__value'
+]
+
+def convert_date_for_hubspot(date_value):
+    if not date_value or pd.isna(date_value):
+        return ""
+    try:
+        return pd.to_datetime(str(date_value), format='%Y-%m-%d').strftime('%d/%m/%Y')
+    except:
+        return ""
+
+def convert_civilite(value):
+    if not value:
+        return ""
+    value_clean = str(value).strip().upper()
+    mapping = {'M': 'Monsieur', 'MME': 'Madame'}
+    return mapping.get(value_clean, value)
+
+def convert_to_boolean(value):
+    if not value or str(value).strip() == "":
+        return ""
+    
+    value_str = str(value).lower().strip()
+    if value_str in ['true', '1', 'yes', 'oui', 'vrai']:
+        return True
+    elif value_str in ['false', '0', 'no', 'non', 'faux']:
+        return False
+    else:
+        return ""
+
+def convert_country_field(value, field_name=""):
+    if not value or pd.isna(value):
+        return ""
+    
+    original_value = str(value).strip()
+    
+    if original_value == "0":
+        return ""
+    
+    try:
+        if float(original_value) == 0:
+            return ""
+    except (ValueError, TypeError):
+        pass
+    
+    converted = CountryConverter.convert_iso_to_country(original_value)
+    
+    return converted
+
+
+# traite un fichier selon son type
+def process_file(file_type):
+    config = FILE_TYPES[file_type]
+    input_file = f'./exports/dwh.mv_{file_type}.csv'
+    output_file = f'dwh_{file_type}_filtered.csv'
+    output_path = os.path.join(output_dir, output_file)
+
+    if not os.path.exists(input_file):
+        print(f"Fichier manquant: {input_file}")
+        return False
+    
+    try:
+        df = pd.read_csv(input_file)
+        
+        if 'Prénom' in df.columns:
+            df = df.rename(columns={'Prénom': 'Prenom'})
+        
+        columns_to_keep = [config['pk']] + BASE_COLUMNS
+        available_columns = [col for col in columns_to_keep if col in df.columns]
+        df_filtered = df[available_columns]
+        
+        processed_data = []
+        for _, row in df_filtered.iterrows():
+            data = {}
+            
+            for column in available_columns:
+                value = row[column] if pd.notna(row[column]) else ""
+                
+                if column.startswith('Flag'):
+                    data[column] = convert_to_boolean(value)
+                elif column == 'Civilite':
+                    data[column] = convert_civilite(value)
+                elif column == 'Date_naissance':
+                    data[column] = convert_date_for_hubspot(value)
+                elif column == 'Pays': 
+                    data[column] = convert_country_field(value, "Pays")
+                elif column == 'Nationalite':  
+                    data[column] = convert_country_field(value, "Nationalité")
+                else:
+                    data[column] = str(value).strip() if value else ""
+            
+            data['profil_apm'] = config['profil_apm']
+            
+            processed_data.append(data)
+        
+        pd.DataFrame(processed_data).to_csv(output_path, index=False)
+        print(f"{len(processed_data)} {file_type}s exportés")
+        
+        upload_success = upload_to_hubspot(output_path, file_type, config)
+        
+        if upload_success:
+            print(f"import {file_type} réussi")
+        else:
+            print(f"échec import {file_type}")
+            
+        return upload_success
+        
+    except Exception as e:
+        print(f"erreur {file_type}: {e}")
+        return False
+
+# upload vers hubspot
+def upload_to_hubspot(csv_file_path, file_type, config):
+    try:
+        headers = {'Authorization': f'Bearer {HUBSPOT_API_KEY}'}
+        
+        mappings = [
+            {"columnObjectTypeId": "0-1", "columnName": config['pk'], "propertyName": config['hubspot_pk']},
+            {"columnObjectTypeId": "0-1", "columnName": "Email", "propertyName": "email", "columnType": "HUBSPOT_ALTERNATE_ID"},
+            {"columnObjectTypeId": "0-1", "columnName": "Civilite", "propertyName": "civilite"},
+            {"columnObjectTypeId": "0-1", "columnName": "Nom", "propertyName": "lastname"},
+            {"columnObjectTypeId": "0-1", "columnName": "Prenom", "propertyName": "firstname"},
+            {"columnObjectTypeId": "0-1", "columnName": "Tel", "propertyName": "phone"},
+            {"columnObjectTypeId": "0-1", "columnName": "Portable", "propertyName": "mobilephone"},
+            {"columnObjectTypeId": "0-1", "columnName": "Pays", "propertyName": "pays"}, 
+            {"columnObjectTypeId": "0-1", "columnName": "Ville", "propertyName": "city"},
+            {"columnObjectTypeId": "0-1", "columnName": "CP", "propertyName": "zip"},
+            {"columnObjectTypeId": "0-1", "columnName": "Adresse", "propertyName": "address"},
+            {"columnObjectTypeId": "0-1", "columnName": "Nationalite", "propertyName": "nationalite"}, 
+            {"columnObjectTypeId": "0-1", "columnName": "Date_naissance", "propertyName": "date_de_naissance"},
+            {"columnObjectTypeId": "0-1", "columnName": "FlagCoordinateur", "propertyName": "flag_coordinateur"},
+            {"columnObjectTypeId": "0-1", "columnName": "FlagExpert", "propertyName": "flag_expert"},
+            {"columnObjectTypeId": "0-1", "columnName": "FlagAnimateur", "propertyName": "flag_animateur"},
+            {"columnObjectTypeId": "0-1", "columnName": "FlagPermanent", "propertyName": "flag_permanent"},
+            {"columnObjectTypeId": "0-1", "columnName": "FlagReferent", "propertyName": "flag_referent"},
+            {"columnObjectTypeId": "0-1", "columnName": "FlagActif", "propertyName": "flag_actif"},
+            {"columnObjectTypeId": "0-1", "columnName": "subscriber_info__status__value", "propertyName": "subscriber_info_status_value"},
+            {"columnObjectTypeId": "0-1", "columnName": "profil_apm", "propertyName": "profil_apm"}
+        ]
+        
+        payload = {
+            "name": f"Import {file_type}s APM - {datetime.now().strftime('%Y-%m-%d %H:%M')}",
+            "importOperations": {"0-1": "UPSERT"},
+            "dateFormat": "DAY_MONTH_YEAR",
+            "marketableContactImport": False,
+            "createContactListFromImport": True,
+            "files": [{
+                "fileName": f"dwh_{file_type}_filtered.csv",
+                "fileFormat": "CSV",
+                "fileImportPage": {
+                    "hasHeader": True,
+                    "columnMappings": mappings
+                }
+            }]
+        }
+        
+        with open(csv_file_path, 'rb') as csv_file:
+            files = {'files': (f"dwh_{file_type}_filtered.csv", csv_file, 'text/csv')}
+            data = {'importRequest': json.dumps(payload)}
+            
+            response = requests.post(HUBSPOT_IMPORT_API_URL, headers=headers, files=files, data=data)
+            
+            if response.status_code == 200:
+                return True
+            else:
+                print(f"erreur API: {response.status_code}")
+                print(f"Réponse: {response.text}")  
+                return False
+            
+    except Exception as e:
+        print(f"erreur upload {file_type}: {e}")
+        return False
+
+def main():
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+    
+    if len(sys.argv) > 1:
+        file_type = sys.argv[1].lower()
+        
+        if file_type in FILE_TYPES:
+            success = process_file(file_type)
+        else:
+            return
+    else:
+        results = {}
+        for file_type in FILE_TYPES.keys():
+            results[file_type] = process_file(file_type)
+        
+        for file_type, success in results.items():
+            status = "ok" if success else "ko"
+            print(f"{file_type}: {status}")
+
+if __name__ == "__main__":
+    main()
