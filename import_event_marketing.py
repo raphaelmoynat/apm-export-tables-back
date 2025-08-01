@@ -1,6 +1,7 @@
 import csv
 import json
 import os
+import time
 from dotenv import load_dotenv
 import requests
 from datetime import datetime, timezone
@@ -10,7 +11,7 @@ load_dotenv()
 
 # configuration
 filename = "./exports/dwh.mv_evt.csv"
-access_token = os.getenv("HUBSPOT_TOKEN")
+access_token = os.getenv("PROD_KEY")
 
 
 def read_csv_data(filename, max_rows=100, start_row=0):
@@ -87,7 +88,7 @@ def read_csv_data(filename, max_rows=100, start_row=0):
             events_data.append(event_data)
             current_row += 1
     
-    print(f"DEBUG: Lu {len(events_data)} événements depuis la ligne {start_row}")
+    print(f"lu {len(events_data)} événements depuis la ligne {start_row}")
     return events_data
 
 
@@ -99,7 +100,6 @@ def create_hubspot_payload(events_data):
         
         if not event_name or event_name.lower() in ['none', 'null', '']:
             event_name = "A renommer"
-            print(f"Nom vide remplacé par 'A renommer' - ID: {event.get('external_event_id', 'N/A')}")
         
         custom_properties = []
         
@@ -181,18 +181,20 @@ def process_all_events_in_batches(filename, access_token, batch_size=100):
         
         # ignorer les lots vides (événements sans nom valide)
         if not payload["inputs"]:
-            print(f"Lot ignoré: aucun événement valide")
+            print(f"lot ignoré: aucun événement valide")
             start_row += batch_size
             continue
         
         result = send_to_hubspot(payload, access_token)
+
+        time.sleep(1)
         
         if result:
             total_processed += len(payload["inputs"])
-            print(f"Lot terminé: {len(payload['inputs'])} événements (total: {total_processed})")
+            print(f"lot terminé: {len(payload['inputs'])} événements (total: {total_processed})")
         else:
             total_errors += len(payload["inputs"])
-            print(f"Erreur dans le lot - {len(payload['inputs'])} événements échoués")
+            print(f"erreur dans le lot - {len(payload['inputs'])} événements échoués")
         
         # arrêter si c'est le dernier lot (moins d'événements que la taille du lot)
         if len(events_data) < batch_size:
@@ -200,8 +202,9 @@ def process_all_events_in_batches(filename, access_token, batch_size=100):
             
         start_row += batch_size
     
-    print(f"Résumé final: {total_processed} événements importés, {total_errors} erreurs")
+    print(f"résumé final: {total_processed} événements importés, {total_errors} erreurs")
     return total_processed
+
 
 # lancement du traitement 
 total_imported = process_all_events_in_batches(filename, access_token)

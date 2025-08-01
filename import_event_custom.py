@@ -10,7 +10,7 @@ import time
 load_dotenv()
 
 output_dir = 'filtered'
-HUBSPOT_API_KEY = os.getenv("HUBSPOT_TOKEN")
+HUBSPOT_API_KEY = os.getenv("PROD_KEY")
 HUBSPOT_IMPORT_API_URL = 'https://api.hubapi.com/crm/v3/imports'
 
 EVENT_COLUMNS = [
@@ -193,7 +193,7 @@ def process_events():
         df_cleaned.to_csv(output_path, index=False)
         print(f"{len(df_cleaned)} événements exportés vers {output_path}")
         
-        upload_success = upload_events_to_hubspot(output_path, available_columns)
+        upload_success = upload_events_to_hubspot(output_path)
         
         if upload_success:
             print("import des événements réussi")
@@ -206,14 +206,14 @@ def process_events():
         print(f"erreur lors du traitement des événements: {e}")
         return False
 
-def upload_events_to_hubspot(csv_file_path, available_columns):
+def upload_events_to_hubspot(csv_file_path):
     try:
         headers = {'Authorization': f'Bearer {HUBSPOT_API_KEY}'}
         
         payload = {
-            "name": f"Import événements 2-141144600 APM - {datetime.now().strftime('%Y-%m-%d %H:%M')}",
+            "name": f"Import événements 2-139503358 APM - {datetime.now().strftime('%Y-%m-%d %H:%M')}",
             "importOperations": {
-                "2-141144600": "UPSERT"
+                "2-139503358": "UPSERT"
             },
             "dateFormat": "YEAR_MONTH_DAY",
             "marketableContactImport": False,
@@ -226,93 +226,93 @@ def upload_events_to_hubspot(csv_file_path, available_columns):
                         "hasHeader": True,
                         "columnMappings": [
                             {
-                                "columnObjectTypeId": "2-141144600",
+                                "columnObjectTypeId": "2-139503358",
                                 "columnName": "pk_evt",
                                 "propertyName": "pk_event",
                                 "columnType": "HUBSPOT_ALTERNATE_ID"
                             },
                             {
-                                "columnObjectTypeId": "2-141144600",
+                                "columnObjectTypeId": "2-139503358",
                                 "columnName": "IdEvt",
-                                "propertyName": "id_next_apm_de_l_evenement"
+                                "propertyName": "id_next_apm_evenement"
                             },
                             {
-                                "columnObjectTypeId": "2-141144600",
+                                "columnObjectTypeId": "2-139503358",
                                 "columnName": "Nom",
                                 "propertyName": "event"
                             },
                             {
-                                "columnObjectTypeId": "2-141144600",
+                                "columnObjectTypeId": "2-139503358",
                                 "columnName": "IdTypeEvt",
                                 "propertyName": "id_type_d_evenement"
                             },
                             {
-                                "columnObjectTypeId": "2-141144600",
+                                "columnObjectTypeId": "2-139503358",
                                 "columnName": "Date",
                                 "propertyName": "start_datetime"
                             },
                             {
-                                "columnObjectTypeId": "2-141144600",
+                                "columnObjectTypeId": "2-139503358",
                                 "columnName": "TypePresence",
                                 "propertyName": "type_de_presence"
                             },
                             {
-                                "columnObjectTypeId": "2-141144600",
+                                "columnObjectTypeId": "2-139503358",
                                 "columnName": "DateAnnulation",
                                 "propertyName": "date_annulation"
                             },
                             {
-                                "columnObjectTypeId": "2-141144600",
+                                "columnObjectTypeId": "2-139503358",
                                 "columnName": "Format",
                                 "propertyName": "format"
                             },
                             {
-                                "columnObjectTypeId": "2-141144600",
+                                "columnObjectTypeId": "2-139503358",
                                 "columnName": "NbAdherents",
                                 "propertyName": "nombre_d_adherents"
                             },
                             {
-                                "columnObjectTypeId": "2-141144600",
+                                "columnObjectTypeId": "2-139503358",
                                 "columnName": "NbParticipants",
                                 "propertyName": "nombre_d_inscrits_nb"
                             },
                             {
-                                "columnObjectTypeId": "2-141144600",
+                                "columnObjectTypeId": "2-139503358",
                                 "columnName": "NbPresents",
                                 "propertyName": "nombre_de_participants_nb"
                             },
                             {
-                                "columnObjectTypeId": "2-141144600",
+                                "columnObjectTypeId": "2-139503358",
                                 "columnName": "TxPresence",
                                 "propertyName": "taux_de_presence_nb"
                             },
                             {
-                                "columnObjectTypeId": "2-141144600",
+                                "columnObjectTypeId": "2-139503358",
                                 "columnName": "Statut",
                                 "propertyName": "statut_de_l_evenement"
                             },
                             {
-                                "columnObjectTypeId": "2-141144600",
+                                "columnObjectTypeId": "2-139503358",
                                 "columnName": "SatisfactionGlobale",
                                 "propertyName": "satisfaction_globale"
                             },
                             {
-                                "columnObjectTypeId": "2-141144600",
+                                "columnObjectTypeId": "2-139503358",
                                 "columnName": "NbEvaluations",
-                                "propertyName": "nombre_d_evaluations"
+                                "propertyName": "nombre_d_evaluations_nb"
                             },
                             {
-                                "columnObjectTypeId": "2-141144600",
+                                "columnObjectTypeId": "2-139503358",
                                 "columnName": "ZIP",
                                 "propertyName": "code_postal_de_l_evenement"
                             },
                             {
-                                "columnObjectTypeId": "2-141144600",
+                                "columnObjectTypeId": "2-139503358",
                                 "columnName": "Annulation",
                                 "propertyName": "motif_d_annulation"
                             },
                             {
-                                "columnObjectTypeId": "2-141144600",
+                                "columnObjectTypeId": "2-139503358",
                                 "columnName": "Pays",
                                 "propertyName": "pays_de_l_evenement"
                             }

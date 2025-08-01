@@ -9,7 +9,7 @@ from country_converter import CountryConverter
 load_dotenv()
 
 output_dir = 'filtered'
-HUBSPOT_API_KEY = os.getenv("HUBSPOT_TOKEN")
+HUBSPOT_API_KEY = os.getenv("PROD_KEY")
 HUBSPOT_IMPORT_API_URL = 'https://api.hubapi.com/crm/v3/imports'
 
 COMPANY_COLUMNS = [

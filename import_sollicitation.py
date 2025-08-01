@@ -9,7 +9,7 @@ import time
 load_dotenv()
 
 filename = "./exports/dwh.mv_sollicitation.csv"  
-access_token = os.getenv("HUBSPOT_TOKEN")
+access_token = os.getenv("PROD_KEY")
 max_solicitations = 1000 
 batch_size = 10
 
@@ -36,24 +36,16 @@ def get_existing_solicitations(access_token, event_type="pe145807702_sollicitati
         
         try:
             response = requests.get(url, headers=headers, params=params)
-            print(f"GET {url} - Status: {response.status_code} - Page: {page_count}")
             
             if response.status_code == 200:
                 data = response.json()
                 solicitations = data.get("results", [])
                 all_solicitations.extend(solicitations)
-                
-                print(f"Récupéré {len(solicitations)} sollicitations (total: {len(all_solicitations)})")
-                
-                # Loguer les premières clés de chaque page pour vérification
-                if solicitations:
-                    sample_keys = [s.get("properties", {}).get("key") for s in solicitations[:3]]
-                    print(f"Exemples de clés sur cette page: {sample_keys}")
+                                
                 
                 paging = data.get("paging", {})
                 if "next" in paging:
                     after = paging["next"].get("after")
-                    print(f"Pagination: after={after}")
                     time.sleep(0.1)  
                 else:
                     print("Fin de pagination atteinte")
@@ -63,10 +55,10 @@ def get_existing_solicitations(access_token, event_type="pe145807702_sollicitati
                 break
                 
         except Exception as e:
-            print(f"ERREUR récupération: {e}")
+            print(f"erreur : {e}")
             break
     
-    print(f"TOTAL: {len(all_solicitations)} sollicitations existantes\n")
+    print(f"total: {len(all_solicitations)} sollicitations existantes\n")
     return all_solicitations
 
 def filter_new_solicitations(solicitations_data, existing_solicitation_keys):
@@ -78,7 +70,7 @@ def filter_new_solicitations(solicitations_data, existing_solicitation_keys):
         key = solicitation.get('key')
         
         if not key:
-            print(f"ATTENTION: Sollicitation sans clé à l'index {i}")
+            print(f"sollicitation sans clé à l'index {i}")
             continue
         
         if key in existing_solicitation_keys:
@@ -88,7 +80,7 @@ def filter_new_solicitations(solicitations_data, existing_solicitation_keys):
         
         new_solicitations.append(solicitation)
     
-    print(f"Sollicitations ignorées (déjà existantes): {skipped_count}")
+    print(f"Ssollicitations ignorées (déjà existantes): {skipped_count}")
  
     
     return new_solicitations
@@ -142,7 +134,6 @@ def read_solicitation_data(filename, max_rows=100):
                     if csv_column in row:
                         value = row[csv_column].strip() if row[csv_column] else ""
                         
-                        # Traitement spécial pour les champs numériques
                         if csv_column in ['renc_id', 'TypeEvt_id', 'Evt_status_id']:
                             if value and value.lower() not in ['null', 'none', '']:
                                 try:
@@ -157,7 +148,7 @@ def read_solicitation_data(filename, max_rows=100):
         print(f"\nLu {len(solicitations_data)} sollicitations du CSV\n")
         
     except Exception as e:
-        print(f"ERREUR lecture CSV: {e}")
+        print(f"erreur lecture CSV: {e}")
         
     return solicitations_data
 
@@ -179,10 +170,10 @@ def convert_date_to_iso(date_string):
             except ValueError:
                 continue
         
-        print(f"ATTENTION: Date non convertible: '{date_string}'")
+        print(f"date non convertible: '{date_string}'")
         return None
     except Exception as e:
-        print(f"ERREUR conversion date: {e}")
+        print(f"erreur conversion date: {e}")
         return None
 
 def convert_date_to_timestamp(date_string):
@@ -291,19 +282,22 @@ def send_solicitations_to_hubspot(payload, access_token, batch_size=100):
     inputs = payload["inputs"]
     total_solicitations = len(inputs)
     successful_batches = 0
+    total_sent = 0 
     
     for i in range(0, total_solicitations, batch_size):
         batch = inputs[i:i + batch_size]
         batch_payload = {"inputs": batch}
         batch_num = i//batch_size + 1
+        batch_size_actual = len(batch)  
         
         try:
             response = requests.post(url, json=batch_payload, headers=headers)
             
-            print(f"BATCH {batch_num}: {response.status_code} - {len(batch)} sollicitations")
+            print(f"BATCH {batch_num}: {response.status_code} - {batch_size_actual} sollicitations")
             
             if response.status_code == 204:
                 successful_batches += 1
+                total_sent += batch_size_actual  
                 print(f"BATCH {batch_num} réussi")
             else:
                 print(f"ERREUR BATCH {batch_num}")
@@ -314,19 +308,18 @@ def send_solicitations_to_hubspot(payload, access_token, batch_size=100):
                     print(f"Réponse brute: {response.text}")
                 
         except Exception as e:
-            print(f"ERREUR RÉSEAU BATCH {batch_num}: {e}")
+            print(f"erreur réseau batch {batch_num}: {e}")
+        
+        time.sleep(0.1) 
     
     total_batches = (total_solicitations + batch_size - 1) // batch_size
-    print(f"\n=== RÉSUMÉ ===")
-    print(f"Batches réussis: {successful_batches}/{total_batches}")
-    print(f"Sollicitations envoyées: {successful_batches * batch_size}/{total_solicitations}")
+    print(f"batches réussis: {successful_batches}/{total_batches}")
+    print(f"sollicitations envoyées: {total_sent}/{total_solicitations}") 
     
     return successful_batches > 0
 
 
-try:
-    print("=== DÉBUT IMPORT SOLLICITATIONS ===\n")
-    
+try:    
     # récupérer les sollicitations existantes
     print("récupération des sollicitations existantes...")
     existing_solicitations = get_existing_solicitations(access_token)
@@ -364,6 +357,6 @@ try:
         print("aucune sollicitation à envoyer après traitement")
         
 except Exception as e:
-    print(f"ERREUR GÉNÉRALE: {e}")
+    print(f"erreur générale: {e}")
     import traceback
     traceback.print_exc()

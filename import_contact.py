@@ -11,7 +11,7 @@ load_dotenv()
 
 # config 
 output_dir = 'filtered'
-HUBSPOT_API_KEY = os.getenv("HUBSPOT_TOKEN")
+HUBSPOT_API_KEY = os.getenv("PROD_KEY")
 HUBSPOT_IMPORT_API_URL = 'https://api.hubapi.com/crm/v3/imports'
 
 # configuration pour les 4 types
@@ -26,11 +26,11 @@ FILE_TYPES = {
 
 # colonnes communes
 BASE_COLUMNS = [
-    'Email', 'Civilite', 'Nom', 'Prenom', 'Tel', 'Portable',
+    'Email', 'Civilite', 'Nom', 'Prenom', 'Statut expert', 'Tel', 'Portable',
     'Pays', 'Ville', 'CP', 'Adresse', 'Nationalite', 'Date_naissance',
     'FlagCoordinateur', 'FlagExpert', 'FlagAnimateur', 
     'FlagPermanent', 'FlagReferent', 'FlagActif',
-    'subscriber_info__status__value'
+    'subscriber_info__status__value', 
 ]
 
 def convert_date_for_hubspot(date_value):
@@ -98,6 +98,11 @@ def process_file(file_type):
             df = df.rename(columns={'Prénom': 'Prenom'})
         
         columns_to_keep = [config['pk']] + BASE_COLUMNS
+
+        if file_type == 'expert' and 'Statut expert' not in df.columns:
+            print("Attention: colonne 'Statut expert' manquante dans le fichier expert")
+
+
         available_columns = [col for col in columns_to_keep if col in df.columns]
         df_filtered = df[available_columns]
         
@@ -118,6 +123,8 @@ def process_file(file_type):
                     data[column] = convert_country_field(value, "Pays")
                 elif column == 'Nationalite':  
                     data[column] = convert_country_field(value, "Nationalité")
+                elif column == 'Statut expert':
+                    data[column] = str(value).strip() if value else ""
                 else:
                     data[column] = str(value).strip() if value else ""
             
@@ -169,6 +176,13 @@ def upload_to_hubspot(csv_file_path, file_type, config):
             {"columnObjectTypeId": "0-1", "columnName": "subscriber_info__status__value", "propertyName": "subscriber_info_status_value"},
             {"columnObjectTypeId": "0-1", "columnName": "profil_apm", "propertyName": "profil_apm"}
         ]
+
+        if file_type == 'expert':
+            mappings.append({
+                "columnObjectTypeId": "0-1", 
+                "columnName": "Statut expert", 
+                "propertyName": "statut_next_apm"
+            })
         
         payload = {
             "name": f"Import {file_type}s APM - {datetime.now().strftime('%Y-%m-%d %H:%M')}",

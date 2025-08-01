@@ -1,3 +1,4 @@
+import time
 from dotenv import load_dotenv
 import psycopg2
 import os
@@ -36,6 +37,8 @@ conn = psycopg2.connect(
 chemin_export = './exports'
 
 IMPORT_SCRIPTS = {
+    'dwh.mv_club': ['import_club.py'],
+    'dwh.mv_region': ['import_region.py'],
     'dwh.mv_expert': ['import_contact.py expert'],
     'dwh.mv_permanent': ['import_contact.py permanent'], 
     'dwh.mv_referent': ['import_contact.py referent'],
@@ -79,7 +82,7 @@ def export(database):
 
 def export_all_tables():
     #exporte toutes les tables configurées
-    print("Début des exports...")
+    print("début des exports...")
     success_count = 0
     
     for name, table in databases.items():
@@ -100,41 +103,51 @@ def run_import_script(script_command, table_name):
         args = parts[1:] if len(parts) > 1 else []
         
         result = subprocess.run([sys.executable, script_file] + args, 
-                              capture_output=True, text=True, timeout=300)
+                              capture_output=True, text=True)
         
         if result.returncode == 0:
             print(f"import {table_name} réussi")
             return True
         else:
-            print(f"Erreur import {table_name}: {result.stderr}")
+            print(f"erreur import {table_name}: {result.stderr}")
             return False
             
-    except subprocess.TimeoutExpired:
-        print(f"Timeout pour l'import de {table_name}")
-        return False
     except Exception as e:
-        print(f"Erreur lors de l'exécution de l'import {table_name}: {e}")
+        print(f"erreur lors de l'exécution de l'import {table_name}: {e}")
         return False
 
 def run_all_imports():
     print("début des imports...")
     success_count = 0    
+    total_scripts = sum(len(scripts) if isinstance(scripts, list) else 1 for scripts in IMPORT_SCRIPTS.values())
+    current_script = 0
     
     for table_name, scripts in IMPORT_SCRIPTS.items():
         csv_file = os.path.join(chemin_export, f'{table_name}.csv')
         if not os.path.exists(csv_file):
-            print(f"Fichier CSV manquant : {csv_file}")
+            print(f"fichier CSV manquant : {csv_file}")
             continue
         
         if isinstance(scripts, list):
             for script_command in scripts:
+                current_script += 1
                 if run_import_script(script_command, f"{table_name} ({script_command})"):
                     success_count += 1
+                
+                if current_script < total_scripts:
+                    print(f"attente de 1 mn avant le prochain import... ")
+                    time.sleep(60)
         else:
+            current_script += 1
             if run_import_script(scripts, table_name):
                 success_count += 1
+            
+            if current_script < total_scripts:
+                print(f"attente de 1 mn avant le prochain import...")
+                time.sleep(60)
     
     return success_count
+
 
 def main():
     print("start")

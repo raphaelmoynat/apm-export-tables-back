@@ -24,6 +24,8 @@ def get_existing_participations(access_token, event_type="pe144476884_evenement_
     all_participations = []
     after = None
     page_count = 0
+
+    print(f"début récupérations des participations")
         
     while True:
         page_count += 1
@@ -37,33 +39,31 @@ def get_existing_participations(access_token, event_type="pe144476884_evenement_
         
         try:
             response = requests.get(url, headers=headers, params=params)
-            print(f"GET {url} - Status: {response.status_code} - Page: {page_count}")
             
             if response.status_code == 200:
                 data = response.json()
                 participations = data.get("results", [])
                 all_participations.extend(participations)
                 
-                print(f"Récupéré {len(participations)} participations (total: {len(all_participations)})")
+            
                 
                 
                 paging = data.get("paging", {})
                 if "next" in paging:
                     after = paging["next"].get("after")
-                    print(f"Pagination: after={after}")
                     time.sleep(0.1)  
                 else:
                     print("Fin de pagination atteinte")
                     break
             else:
-                print(f"ERREUR API: {response.status_code} - {response.text}")
+                print(f"erreur api : {response.status_code} - {response.text}")
                 break
                 
         except Exception as e:
-            print(f"ERREUR récupération: {e}")
+            print(f"erreur récupération: {e}")
             break
     
-    print(f"TOTAL: {len(all_participations)} participations existantes\n")
+    print(f"total : {len(all_participations)} participations existantes\n")
     return all_participations
 
 def filter_new_participations(participations_data, existing_participation_keys):
@@ -75,7 +75,7 @@ def filter_new_participations(participations_data, existing_participation_keys):
         pkparticipation = participation.get('pkparticipation')
         
         if not pkparticipation:
-            print(f"ATTENTION: Participation sans PK à l'index {i}")
+            print(f"participation sans PK à l'index {i}")
             continue
         
         if pkparticipation in existing_participation_keys:
@@ -85,13 +85,10 @@ def filter_new_participations(participations_data, existing_participation_keys):
         
         new_participations.append(participation)
     
-    print(f"Participations ignorées (déjà existantes): {skipped_count}")
-    if duplicates:
-        print(f"Exemples de PK ignorées: {duplicates[:5]}")
+    print(f"participations ignorées (déjà existantes): {skipped_count}")
     
     #vérifier les clés des nouvelles participations
     new_keys = [p.get('pkparticipation') for p in new_participations]
-    print(f"Exemples de nouvelles PK à importer: {new_keys[:5]}")
     
     return new_participations
 
@@ -160,7 +157,7 @@ def read_participation_data(filename, max_rows=100):
         print(f"\nLu {len(participations_data)} participations du CSV\n")
         
     except Exception as e:
-        print(f"ERREUR lecture CSV: {e}")
+        print(f"erreur lecture CSV: {e}")
         
     return participations_data
 
@@ -195,10 +192,10 @@ def convert_date_to_iso(date_string):
             except ValueError:
                 continue
         
-        print(f"ATTENTION: Date non convertible: '{date_string}'")
+        print(f"date non convertible: '{date_string}'")
         return None
     except Exception as e:
-        print(f"ERREUR conversion date: {e}")
+        print(f"erreur conversion date: {e}")
         return None
 
 def convert_date_to_timestamp(date_string):
@@ -287,8 +284,7 @@ def create_hubspot_payload(participations_data):
     return {"inputs": hubspot_inputs}
 
 
-
-def send_participations_to_hubspot(payload, access_token, batch_size=100):    
+def send_participations_to_hubspot(payload, access_token, batch_size=25):    
     url = "https://api.hubapi.com/events/v3/send/batch"
     headers = {
         "Authorization": f"Bearer {access_token}",
@@ -304,28 +300,39 @@ def send_participations_to_hubspot(payload, access_token, batch_size=100):
         batch_payload = {"inputs": batch}
         batch_num = i//batch_size + 1
         
-        try:
-            response = requests.post(url, json=batch_payload, headers=headers)
-            
-            
-            if response.status_code == 204:
-                successful_batches += 1
-            else:
-                print(f"ERREUR BATCH {batch_num}")
-                try:
-                    error_data = response.json()
-                    print(f"Détails erreur: {json.dumps(error_data, indent=2)}")
-                except:
-                    pass
+        success = False
+        max_retries = 3
+        
+        for attempt in range(max_retries):
+            try:
+                print(f"Envoi du batch {batch_num}/{(total_participations + batch_size - 1) // batch_size}")
+                response = requests.post(url, json=batch_payload, headers=headers, timeout=30)
                 
-        except Exception as e:
-            print(f"ERREUR RÉSEAU BATCH {batch_num}: {e}")
+                if response.status_code == 204:
+                    print(f"Batch {batch_num} réussi")
+                    successful_batches += 1
+                    success = True
+                    break
+                else:
+                    print(f"Erreur batch {batch_num}: {response.status_code}")
+                    
+            except Exception as e:
+                print(f"ERREUR RÉSEAU BATCH {batch_num}: {e}")
+                if attempt < max_retries - 1:
+                    wait_time = 5 * (attempt + 1)
+                    print(f"Nouvelle tentative dans {wait_time} secondes...")
+                    time.sleep(wait_time)
+        
+        # pause entre les lots pour éviter les problèmes de débit
+        time.sleep(1)
     
     total_batches = (total_participations + batch_size - 1) // batch_size
     print(f"Batches réussis: {successful_batches}/{total_batches}")
     print(f"Participations envoyées: {successful_batches * batch_size}/{total_participations}")
     
     return successful_batches > 0
+
+
 
 try:
     existing_participations = get_existing_participations(access_token)
@@ -343,7 +350,7 @@ try:
     payload = create_hubspot_payload(new_participations)
     
     if payload['inputs']:
-        print(f"envoie de{len(payload['inputs'])} nouvelles participations")
+        print(f"envoie de {len(payload['inputs'])} nouvelles participations")
         result = send_participations_to_hubspot(payload, access_token, batch_size)
         
         if result:
