@@ -13,7 +13,7 @@ access_token = os.getenv("PROD_KEY")
 max_solicitations = 1000 
 batch_size = 10
 
-def get_existing_solicitations(access_token, event_type="pe145807702_sollicitation_v2", limit=100):    
+def get_existing_solicitations(access_token, event_type="pe144476884_sollicitation", limit=100):    
     url = f"https://api.hubapi.com/events/v3/events"
     headers = {
         "Authorization": f"Bearer {access_token}",
@@ -261,7 +261,7 @@ def create_hubspot_payload(solicitations_data):
         
         hubspot_event = {
             "occurredAt": occurred_at,
-            "eventName": "pe145807702_sollicitation_v2",
+            "eventName": "pe144476884_sollicitation",
             "email": solicitation_copy.get('expert_email', ''),
             "properties": clean_properties
         }
