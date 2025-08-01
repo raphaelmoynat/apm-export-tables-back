@@ -45,6 +45,9 @@ IMPORT_SCRIPTS = {
     'dwh.mv_adherent': ['import_contact.py adherent'],
     'dwh.mv_societe': ['import_societe.py'],
     'dwh.mv_evt': ["import_event_custom.py", "import_event_marketing.py"],
+    'dwh.mv_sollicitation': ["import_sollicitation.py"],
+    'dwh.mv_participation': ["import_participation.py"],
+
 }
 
 def clean_exports_directory():
