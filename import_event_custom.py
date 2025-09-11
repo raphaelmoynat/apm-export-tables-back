@@ -3,9 +3,8 @@ import pandas as pd
 import os
 import requests
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from country_converter import CountryConverter
-import time
 
 load_dotenv()
 
@@ -13,27 +12,55 @@ output_dir = 'filtered'
 HUBSPOT_API_KEY = os.getenv("PROD_KEY")
 HUBSPOT_IMPORT_API_URL = 'https://api.hubapi.com/crm/v3/imports'
 
+# colonnes à traiter du fichier csv
 EVENT_COLUMNS = [
-    'pk_evt',
-    'IdEvt',
-    'Nom',
-    'IdTypeEvt',
-    'Date',
-    'TypePresence',
-    'DateAnnulation',
-    'Format',
-    'NbAdherents',
-    'NbParticipants',
-    'NbPresents',
-    'TxPresence',
-    'Statut',
-    'SatisfactionGlobale',
-    'NbEvaluations',
-    'ZIP',
-    'Annulation',
-    'Pays'
+    'pk_evt', 'IdEvt', 'IdInter', 'Nom', 'IdTypeEvt', 'TypeEvt', 'Date',
+    'TypePresence', 'DateAnnulation', 'Ordre', 'Format', 'NbAdherents',
+    'NbInvites', 'NbParticipants', 'TxPresence', 'TxPresence2', 'IdStatut',
+    'Statut', 'SatisfactionGlobale', 'SatisfactionGlobale2', 'SatisfactionGlobale3',
+    'NbEvaluations', 'Adresse', 'Pays', 'Region', 'LieuEvt', 'Dept', 'Ville',
+    'ZIP', 'Annulation', 'IdModePaiement', 'ModePaiement', 'Date_Creation', 'Date_MAJ'
 ]
 
+# correspondance csv -> hubspot
+columns_mapping = {
+    'pk_evt': 'pk_event',
+    'IdEvt': 'id_next_apm_evenement', 
+    'IdInter': "id_intervention",
+    'Nom': 'event',
+    'IdTypeEvt': 'id_type_d_evenement',
+    'TypeEvt': 'type_d_evenement',
+    'Date': 'start_datetime',
+    'TypePresence': 'type_de_presence',
+    'DateAnnulation': 'date_annulation',
+    'Ordre':'ordre_du_jour',
+    'Format': 'format',
+    'NbAdherents': 'nombre_d_adherents',
+    'NbInvites': 'nombre_d_invites_nb',
+    'NbParticipants': 'nombre_de_participants_nb',
+    'TxPresence': 'taux_de_presence_nb',
+    'TxPresence2': 'taux_de_presence_2',
+    'IdStatut': 'id_statut_de_l_evenement',
+    'Statut': 'statut_de_l_evenement',
+    'SatisfactionGlobale': 'satisfaction_globale',
+    'SatisfactionGlobale2': 'satisfaction_globale_2',
+    'SatisfactionGlobale3': 'satisfaction_globale_3',
+    'NbEvaluations': 'nombre_d_evaluations_nb',
+    'Adresse': 'adresse_de_l_evenement',
+    'Pays': 'pays_de_l_evenement',
+    'Region': 'region_de_l_evenement',
+    'LieuEvt': 'lieu_de_l_evenement',
+    'Dept': "departement",
+    'Ville': 'ville_de_l_evenement',
+    'ZIP': 'code_postal_de_l_evenement',
+    'Annulation': 'motif_d_annulation',
+    'IdModePaiement': 'id_mode_paiement',
+    'ModePaiement': 'mode_paiement',
+    'Date_Creation': 'createdat',
+    'Date_MAJ': 'updated_at'
+}
+
+# mapping des types de présence
 TYPE_PRESENCE_MAPPING = {
     'À distance': 'Club à distance',
     'Présentiel': 'Présentiel',
@@ -41,98 +68,120 @@ TYPE_PRESENCE_MAPPING = {
     'Mixte': 'Mixte'
 }
 
+TYPE_EVENT_MAPPING = {
+    'Rencontre': 'Rencontre de club'
+}
+
 def convert_type_presence(value):
     if not value or pd.isna(value):
         return ""
-    
-    value_str = str(value).strip()
-    return TYPE_PRESENCE_MAPPING.get(value_str, value_str)
+    return TYPE_PRESENCE_MAPPING.get(str(value).strip(), str(value).strip())
 
-def convert_country_for_event(value):
-    if not value or pd.isna(value):
-        return ""
-    
-    original_value = str(value).strip()
-    
-    if original_value == "0":
+def convert_country(value):
+    if not value or pd.isna(value) or str(value).strip() == "0":
         return ""
     
     try:
-        if float(original_value) == 0:
-            return ""
-    except (ValueError, TypeError):
-        pass
-    
-    converted = CountryConverter.convert_iso_to_country(original_value)
-    
-    return converted
+        return CountryConverter.convert_iso_to_country(str(value).strip())
+    except:
+        return str(value).strip()
 
-def format_datetime_for_hubspot(value):
-    if not value or pd.isna(value):
-        return ""
-    
+def convert_date_to_timestamp(date_string):
+    if not date_string or str(date_string).lower() in ['null', 'none', '', 'nan']:
+        return ""  
     try:
-        if isinstance(value, datetime):
-            return value.strftime('%Y-%m-%d %H:%M:%S')
+        date_string = str(date_string).strip()
         
-        value_str = str(value).strip()
-        if value_str:
-            formats_to_try = [
-                '%Y-%m-%d %H:%M:%S',
-                '%Y-%m-%d %H:%M',
-                '%Y-%m-%d',
-                '%d/%m/%Y %H:%M:%S',
-                '%d/%m/%Y %H:%M',
-                '%d/%m/%Y'
-            ]
-            
-            for fmt in formats_to_try:
-                try:
-                    dt = datetime.strptime(value_str, fmt)
-                    if fmt in ['%Y-%m-%d', '%d/%m/%Y']:
-                        dt = dt.replace(hour=9, minute=0, second=0)
-                    return dt.strftime('%Y-%m-%d %H:%M:%S')
-                except ValueError:
-                    continue
+        #différents formats de date
+        date_formats = [
+            '%Y-%m-%d %H:%M:%S%z',      
+            '%Y-%m-%d %H:%M:%S+00:00',  
+            '%Y-%m-%d %H:%M:%S',
+            '%Y-%m-%d',
+            '%d/%m/%Y %H:%M:%S',
+            '%d/%m/%Y',
+            '%Y-%m-%d %H:%M'
+        ]
         
-        print(f"⚠️ Format de date non reconnu: {value}")
+        for date_format in date_formats:
+            try:
+                if date_format == '%Y-%m-%d':
+                    date_obj = datetime.strptime(date_string, date_format)
+                    date_obj = date_obj.replace(hour=9, minute=0, second=0, tzinfo=timezone.utc)  # 9h par défaut
+                elif '%z' in date_format or '+00:00' in date_format:
+                    date_obj = datetime.strptime(date_string, date_format)
+                    if date_obj.tzinfo is None:
+                        date_obj = date_obj.replace(tzinfo=timezone.utc)
+                else:
+                    date_obj = datetime.strptime(date_string, date_format)
+                    date_obj = date_obj.replace(tzinfo=timezone.utc)
+                
+                timestamp_ms = int(date_obj.timestamp() * 1000)
+                return str(timestamp_ms)
+            except ValueError:
+                continue
+        
+        print(f"Format de date non reconnu: {date_string}")
         return ""
-        
     except Exception as e:
-        print(f"Erreur formatage datetime {value}: {e}")
+        print(f"Erreur conversion date {date_string}: {e}")
         return ""
 
-def format_date_for_hubspot(value):
+
+def format_date(value):
     if not value or pd.isna(value):
         return ""
     
     try:
-        if isinstance(value, datetime):
-            return value.strftime('%Y-%m-%d')
-        
         value_str = str(value).strip()
-        if value_str:
-            formats_to_try = [
-                '%Y-%m-%d',
-                '%d/%m/%Y',
-                '%Y-%m-%d %H:%M:%S'
-            ]
-            
-            for fmt in formats_to_try:
-                try:
-                    dt = datetime.strptime(value_str, fmt)
-                    return dt.strftime('%Y-%m-%d')
-                except ValueError:
-                    continue
+        formats = ['%Y-%m-%d', '%d/%m/%Y', '%Y-%m-%d %H:%M:%S']
         
+        for fmt in formats:
+            try:
+                dt = datetime.strptime(value_str, fmt)
+                return dt.strftime('%Y-%m-%d')
+            except ValueError:
+                continue
         return ""
-        
-    except Exception as e:
-        print(f"Erreur formatage date {value}: {e}")
+    except:
         return ""
 
-def clean_event_data(df):
-    processed_data = []
+def convert_to_int(value):
+    try:
+        if value and str(value).replace('.', '').replace('-', '').isdigit():
+            return int(float(value))
+        return ""
+    except:
+        return ""
+
+def convert_type_event(value):
+    if not value or pd.isna(value):
+        return ""
+    return TYPE_EVENT_MAPPING.get(str(value).strip(), str(value).strip())
+
+def convert_to_float(value):
+    try:
+        if value and str(value).strip() not in ['', 'null', 'none', 'nan']:
+            return float(value)
+        return ""
+    except:
+        return ""
+
+
+def clean_data(df):
+    # colonnes dates
+    date_columns = ['DateAnnulation']
+    
+    # colonnes datetime (date + heure)
+    datetime_columns = ['Date', 'Date_Creation', 'Date_MAJ']
+
+    float_columns = ['TxPresence', 'TxPresence2', 'SatisfactionGlobale', 
+                    'SatisfactionGlobale2', 'SatisfactionGlobale3']
+    
+    numeric_columns = ['IdEvt', 'IdInter', 'IdTypeEvt', 'NbAdherents', 'NbInvites', 
+                      'NbParticipants', 'IdStatut', 'NbEvaluations', 'IdModePaiement']
+    
+    cleaned_data = []
     
     for _, row in df.iterrows():
         data = {}
@@ -140,36 +189,29 @@ def clean_event_data(df):
         for column in df.columns:
             value = row[column] if pd.notna(row[column]) else ""
             
+            # traitement spécifique par colonne
             if column == 'Nom':
-                if not value or str(value).strip().lower() in ['', 'none', 'null']:
-                    data[column] = "A renommer"
-                else:
-                    data[column] = str(value).strip()
-            
+                data[column] = "A renommer" if not value or str(value).strip().lower() in ['', 'none', 'null'] else str(value).strip()
             elif column == 'TypePresence':
                 data[column] = convert_type_presence(value)
-            
+            elif column == 'TypeEvt':  
+                data[column] = convert_type_event(value)
             elif column == 'Pays':
-                data[column] = convert_country_for_event(value)
-            
-            elif column == 'Date':  
-                data[column] = format_datetime_for_hubspot(value)
-        
-            elif column == 'DateAnnulation': 
-                data[column] = format_date_for_hubspot(value)
-            
-            elif column in ['IdTypeEvt', 'NbAdherents', 'NbParticipants', 'NbPresents', 'TxPresence', 'SatisfactionGlobale', 'NbEvaluations']:
-                try:
-                    data[column] = int(float(value)) if value and str(value).replace('.', '').isdigit() else ""
-                except:
-                    data[column] = ""
-            
+                data[column] = convert_country(value)
+            elif column in datetime_columns:  
+                data[column] = convert_date_to_timestamp(value)
+            elif column in date_columns:
+                data[column] = format_date(value)
+            elif column in float_columns:  
+                data[column] = convert_to_float(value)
+            elif column in numeric_columns:
+                data[column] = convert_to_int(value)
             else:
                 data[column] = str(value).strip() if value else ""
         
-        processed_data.append(data)
+        cleaned_data.append(data)
     
-    return pd.DataFrame(processed_data)
+    return pd.DataFrame(cleaned_data)
 
 def process_events():
     input_file = './exports/dwh.mv_evt.csv'
@@ -178,152 +220,72 @@ def process_events():
     
     try:
         df = pd.read_csv(input_file)
-        print(f"nombre total d'événements: {len(df)}")
         
+        # vérifier les colonnes disponibles
         available_columns = [col for col in EVENT_COLUMNS if col in df.columns]
         missing_columns = [col for col in EVENT_COLUMNS if col not in df.columns]
         
         if missing_columns:
-            print(f"colonnes manquantes: {missing_columns}")
+            print(f"colonnes manquantes: {len(missing_columns)}")
         
+        # filtrer et nettoyer
         df_filtered = df[available_columns]
+        df_cleaned = clean_data(df_filtered)
         
-        df_cleaned = clean_event_data(df_filtered)
-        
+        # sauvegarder
         df_cleaned.to_csv(output_path, index=False)
-        print(f"{len(df_cleaned)} événements exportés vers {output_path}")
+        print(f"{len(df_cleaned)} événements traités")
         
-        upload_success = upload_events_to_hubspot(output_path)
-        
-        if upload_success:
-            print("import des événements réussi")
-        else:
-            print("échec de l'import des événements")
-            
-        return upload_success
+        # uploader vers hubspot
+        return upload_to_hubspot(output_path, available_columns)
         
     except Exception as e:
-        print(f"erreur lors du traitement des événements: {e}")
+        print(f"erreur traitement: {e}")
         return False
 
-def upload_events_to_hubspot(csv_file_path):
+def upload_to_hubspot(csv_file_path, available_columns):
     try:
         headers = {'Authorization': f'Bearer {HUBSPOT_API_KEY}'}
         
+        # créer les mappings de colonnes
+        column_mappings = []
+        
+        # clé primaire
+        if 'pk_evt' in available_columns:
+            column_mappings.append({
+                "columnObjectTypeId": "2-139503358",
+                "columnName": "pk_evt",
+                "propertyName": "pk_event",
+                "columnType": "HUBSPOT_ALTERNATE_ID"
+            })
+        
+        # autres colonnes
+        for csv_column in available_columns:
+            if csv_column != 'pk_evt' and csv_column in columns_mapping:
+                column_mappings.append({
+                    "columnObjectTypeId": "2-139503358",
+                    "columnName": csv_column,
+                    "propertyName": columns_mapping[csv_column]
+                })
+        
+        # configuration d'import
         payload = {
-            "name": f"Import événements 2-139503358 APM - {datetime.now().strftime('%Y-%m-%d %H:%M')}",
-            "importOperations": {
-                "2-139503358": "UPSERT"
-            },
+            "name": f"Import événements APM - {datetime.now().strftime('%Y-%m-%d %H:%M')}",
+            "importOperations": {"2-139503358": "UPSERT"},
             "dateFormat": "YEAR_MONTH_DAY",
             "marketableContactImport": False,
             "createContactListFromImport": False,
-            "files": [
-                {
-                    "fileName": "dwh_evenement_filtered.csv",
-                    "fileFormat": "CSV",
-                    "fileImportPage": {
-                        "hasHeader": True,
-                        "columnMappings": [
-                            {
-                                "columnObjectTypeId": "2-139503358",
-                                "columnName": "pk_evt",
-                                "propertyName": "pk_event",
-                                "columnType": "HUBSPOT_ALTERNATE_ID"
-                            },
-                            {
-                                "columnObjectTypeId": "2-139503358",
-                                "columnName": "IdEvt",
-                                "propertyName": "id_next_apm_evenement"
-                            },
-                            {
-                                "columnObjectTypeId": "2-139503358",
-                                "columnName": "Nom",
-                                "propertyName": "event"
-                            },
-                            {
-                                "columnObjectTypeId": "2-139503358",
-                                "columnName": "IdTypeEvt",
-                                "propertyName": "id_type_d_evenement"
-                            },
-                            {
-                                "columnObjectTypeId": "2-139503358",
-                                "columnName": "Date",
-                                "propertyName": "start_datetime"
-                            },
-                            {
-                                "columnObjectTypeId": "2-139503358",
-                                "columnName": "TypePresence",
-                                "propertyName": "type_de_presence"
-                            },
-                            {
-                                "columnObjectTypeId": "2-139503358",
-                                "columnName": "DateAnnulation",
-                                "propertyName": "date_annulation"
-                            },
-                            {
-                                "columnObjectTypeId": "2-139503358",
-                                "columnName": "Format",
-                                "propertyName": "format"
-                            },
-                            {
-                                "columnObjectTypeId": "2-139503358",
-                                "columnName": "NbAdherents",
-                                "propertyName": "nombre_d_adherents"
-                            },
-                            {
-                                "columnObjectTypeId": "2-139503358",
-                                "columnName": "NbParticipants",
-                                "propertyName": "nombre_d_inscrits_nb"
-                            },
-                            {
-                                "columnObjectTypeId": "2-139503358",
-                                "columnName": "NbPresents",
-                                "propertyName": "nombre_de_participants_nb"
-                            },
-                            {
-                                "columnObjectTypeId": "2-139503358",
-                                "columnName": "TxPresence",
-                                "propertyName": "taux_de_presence_nb"
-                            },
-                            {
-                                "columnObjectTypeId": "2-139503358",
-                                "columnName": "Statut",
-                                "propertyName": "statut_de_l_evenement"
-                            },
-                            {
-                                "columnObjectTypeId": "2-139503358",
-                                "columnName": "SatisfactionGlobale",
-                                "propertyName": "satisfaction_globale"
-                            },
-                            {
-                                "columnObjectTypeId": "2-139503358",
-                                "columnName": "NbEvaluations",
-                                "propertyName": "nombre_d_evaluations_nb"
-                            },
-                            {
-                                "columnObjectTypeId": "2-139503358",
-                                "columnName": "ZIP",
-                                "propertyName": "code_postal_de_l_evenement"
-                            },
-                            {
-                                "columnObjectTypeId": "2-139503358",
-                                "columnName": "Annulation",
-                                "propertyName": "motif_d_annulation"
-                            },
-                            {
-                                "columnObjectTypeId": "2-139503358",
-                                "columnName": "Pays",
-                                "propertyName": "pays_de_l_evenement"
-                            }
-                        ]
-                    }
+            "files": [{
+                "fileName": "dwh_evenement_filtered.csv",
+                "fileFormat": "CSV",
+                "fileImportPage": {
+                    "hasHeader": True,
+                    "columnMappings": column_mappings
                 }
-            ]
+            }]
         }
         
-        print("upload vers hs en cours...")
-        
+        # envoyer vers hubspot
         with open(csv_file_path, 'rb') as csv_file:
             files = {'files': ('dwh_evenement_filtered.csv', csv_file, 'text/csv')}
             data = {'importRequest': json.dumps(payload)}
@@ -331,16 +293,14 @@ def upload_events_to_hubspot(csv_file_path):
             response = requests.post(HUBSPOT_IMPORT_API_URL, headers=headers, files=files, data=data)
             
             if response.status_code == 200:
-                result = response.json()
                 print("upload réussi")
                 return True
             else:
-                print(f"erreur API HubSpot: {response.status_code}")
-                print(f"response: {response.text}")
+                print(f"erreur upload: {response.status_code}")
                 return False
                 
     except Exception as e:
-        print(f"erreur lors de l'upload: {e}")
+        print(f"erreur upload: {e}")
         return False
 
 def main():
@@ -348,11 +308,7 @@ def main():
         os.makedirs(output_dir)
     
     success = process_events()
-    
-    if success:
-        print("import terminé")
-    else:
-        print("échec de l'import")
+    print("terminé" if success else "échec")
 
 if __name__ == "__main__":
     main()

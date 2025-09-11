@@ -16,21 +16,43 @@ HUBSPOT_IMPORT_API_URL = 'https://api.hubapi.com/crm/v3/imports'
 
 # configuration pour les 4 types
 FILE_TYPES = {
-    'expert': {'pk': 'PKExpert', 'hubspot_pk': 'pk_expert', 'profil_apm': 'Expert'},
-    'permanent': {'pk': 'PKPermanent', 'hubspot_pk': 'pk_permanent', 'profil_apm': 'Permanent'}, 
-    'referent': {'pk': 'PKReferent', 'hubspot_pk': 'pk_referent', 'profil_apm': 'Référent'},
-    'adherent': {'pk': 'PKAdherent', 'hubspot_pk': 'pk_adherent', 'profil_apm': 'Adhérent'}
+    'expert': {
+        'pk': 'PKExpert', 
+        'hubspot_pk': 'pk_membre', 
+        'profil_apm': 'Expert',
+        'specific_columns': ['SocieteFacturation', 'TypeTVA', 'IdTVAInter', 'accounting__vat_international', 'Id Permanent']
+    },
+    'permanent': {
+        'pk': 'PKPermanent', 
+        'hubspot_pk': 'pk_membre', 
+        'profil_apm': 'Permanent',
+        'specific_columns': []
+    }, 
+    'referent': {
+        'pk': 'PKReferent', 
+        'hubspot_pk': 'pk_membre', 
+        'profil_apm': 'Référent',
+        'specific_columns': []
+    },
+    'adherent': {
+        'pk': 'PKAdherent', 
+        'hubspot_pk': 'pk_membre', 
+        'profil_apm': 'Adhérent',
+        'specific_columns': ['active_subscription__signed_cpp__filename', 'active_subscription__signed_cpp__date', 
+                           'active_subscription__signed_cpp__asset_filename', 'active_subscription__signed_cpp__url', 'FK_Societe']
+    }
 }
+
 
 
 
 # colonnes communes
 BASE_COLUMNS = [
     'Email', 'Civilite', 'Nom', 'Prenom', 'Statut expert', 'Tel', 'Portable',
-    'Pays', 'Ville', 'CP', 'Adresse', 'Nationalite', 'Date_naissance',
+    'Pays', 'Ville', 'CP', 'Adresse', 'Nationalite', 'Date_naissance', 'Dept', 'StatutPro', 'Club',
     'FlagCoordinateur', 'FlagExpert', 'FlagAnimateur', 
-    'FlagPermanent', 'FlagReferent', 'FlagActif',
-    'subscriber_info__status__value', 
+    'FlagPermanent', 'FlagReferent', 'FlagActif', 'FlagMembre', 'DernDateEntree', 
+    'subscriber_info__status__value', 'active_subscription__club_info__name'
 ]
 
 def convert_date_for_hubspot(date_value):
@@ -79,6 +101,39 @@ def convert_country_field(value, field_name=""):
     
     return converted
 
+def convert_statut_pro(value):
+    if not value or pd.isna(value):
+        return "Autre"
+    
+    value_clean = str(value).strip()
+    
+    if not value_clean or value_clean.lower() in ["nan", "", "0"]:
+        return "Autre"
+    
+    # mapping vers les noms internes hs
+    mapping = {
+        'salarie': 'Salarié',
+        'salarié': 'Salarié',
+        'independant': 'Indépendant',
+        'indépendant': 'Indépendant',
+        'sans emploi': 'Sans emploi',
+        'chomeur': 'Sans emploi',
+        'chômeur': 'Sans emploi',
+        'gerant': 'Gérant d\'entreprise',
+        'gérant': 'Gérant d\'entreprise',
+        'gerant d\'entreprise': 'Gérant d\'entreprise',
+        'gérant d\'entreprise': 'Gérant d\'entreprise',
+        'enseignant': 'Enseignant',
+        'chercheur': 'Chercheur',
+        'autre': 'Autre'
+    }
+    
+    value_lower = value_clean.lower()
+    if value_lower in mapping:
+        return mapping[value_lower]
+    
+    return "Autre"
+
 
 # traite un fichier selon son type
 def process_file(file_type):
@@ -97,11 +152,11 @@ def process_file(file_type):
         if 'Prénom' in df.columns:
             df = df.rename(columns={'Prénom': 'Prenom'})
         
-        columns_to_keep = [config['pk']] + BASE_COLUMNS
+        #inclure les colonnes de base + PK + colonnes spécifiques
+        columns_to_keep = [config['pk']] + BASE_COLUMNS + config.get('specific_columns', [])
 
         if file_type == 'expert' and 'Statut expert' not in df.columns:
             print("Attention: colonne 'Statut expert' manquante dans le fichier expert")
-
 
         available_columns = [col for col in columns_to_keep if col in df.columns]
         df_filtered = df[available_columns]
@@ -117,12 +172,17 @@ def process_file(file_type):
                     data[column] = convert_to_boolean(value)
                 elif column == 'Civilite':
                     data[column] = convert_civilite(value)
-                elif column == 'Date_naissance':
+                elif column in ['Date_naissance', 'DernDateEntree', 'active_subscription__signed_cpp__date']:
                     data[column] = convert_date_for_hubspot(value)
                 elif column == 'Pays': 
                     data[column] = convert_country_field(value, "Pays")
                 elif column == 'Nationalite':  
                     data[column] = convert_country_field(value, "Nationalité")
+                elif column == 'StatutPro':
+                    data[column] = convert_statut_pro(value)
+
+
+
                 elif column == 'Statut expert':
                     data[column] = str(value).strip() if value else ""
                 else:
@@ -148,11 +208,13 @@ def process_file(file_type):
         print(f"erreur {file_type}: {e}")
         return False
 
+
 # upload vers hubspot
 def upload_to_hubspot(csv_file_path, file_type, config):
     try:
         headers = {'Authorization': f'Bearer {HUBSPOT_API_KEY}'}
         
+        # mapping de base
         mappings = [
             {"columnObjectTypeId": "0-1", "columnName": config['pk'], "propertyName": config['hubspot_pk']},
             {"columnObjectTypeId": "0-1", "columnName": "Email", "propertyName": "email", "columnType": "HUBSPOT_ALTERNATE_ID"},
@@ -167,22 +229,41 @@ def upload_to_hubspot(csv_file_path, file_type, config):
             {"columnObjectTypeId": "0-1", "columnName": "Adresse", "propertyName": "address"},
             {"columnObjectTypeId": "0-1", "columnName": "Nationalite", "propertyName": "nationalite"}, 
             {"columnObjectTypeId": "0-1", "columnName": "Date_naissance", "propertyName": "date_de_naissance"},
+            {"columnObjectTypeId": "0-1", "columnName": "Dept", "propertyName": "departement"},
+            {"columnObjectTypeId": "0-1", "columnName": "StatutPro", "propertyName": "statut_professionnel"},
+            {"columnObjectTypeId": "0-1", "columnName": "Club", "propertyName": "club"},
             {"columnObjectTypeId": "0-1", "columnName": "FlagCoordinateur", "propertyName": "flag_coordinateur"},
             {"columnObjectTypeId": "0-1", "columnName": "FlagExpert", "propertyName": "flag_expert"},
             {"columnObjectTypeId": "0-1", "columnName": "FlagAnimateur", "propertyName": "flag_animateur"},
             {"columnObjectTypeId": "0-1", "columnName": "FlagPermanent", "propertyName": "flag_permanent"},
             {"columnObjectTypeId": "0-1", "columnName": "FlagReferent", "propertyName": "flag_referent"},
             {"columnObjectTypeId": "0-1", "columnName": "FlagActif", "propertyName": "flag_actif"},
+            {"columnObjectTypeId": "0-1", "columnName": "FlagMembre", "propertyName": "flag_membre"},
+            {"columnObjectTypeId": "0-1", "columnName": "DernDateEntree", "propertyName": "derniere_date_entree"},
             {"columnObjectTypeId": "0-1", "columnName": "subscriber_info__status__value", "propertyName": "subscriber_info_status_value"},
+            {"columnObjectTypeId": "0-1", "columnName": "active_subscription__club_info__name", "propertyName": "active_subscription_club_info_name"},
             {"columnObjectTypeId": "0-1", "columnName": "profil_apm", "propertyName": "profil_apm"}
         ]
 
+        #mappings spécifiques par type
         if file_type == 'expert':
-            mappings.append({
-                "columnObjectTypeId": "0-1", 
-                "columnName": "Statut expert", 
-                "propertyName": "statut_next_apm"
-            })
+            mappings.extend([
+                {"columnObjectTypeId": "0-1", "columnName": "Statut expert", "propertyName": "statut_next_apm"},
+                {"columnObjectTypeId": "0-1", "columnName": "SocieteFacturation", "propertyName": "societe_facturation"},
+                {"columnObjectTypeId": "0-1", "columnName": "TypeTVA", "propertyName": "type_tva"},
+                {"columnObjectTypeId": "0-1", "columnName": "IdTVAInter", "propertyName": "id_tva_inter"},
+                {"columnObjectTypeId": "0-1", "columnName": "accounting__vat_international", "propertyName": "expert_comptabilite_tva_international"},
+                {"columnObjectTypeId": "0-1", "columnName": "Id Permanent", "propertyName": "id_permanent"}
+            ])
+        
+        elif file_type == 'adherent':
+            mappings.extend([
+                {"columnObjectTypeId": "0-1", "columnName": "active_subscription__signed_cpp__filename", "propertyName": "active_subscription_signed_cpp_filename"},
+                {"columnObjectTypeId": "0-1", "columnName": "active_subscription__signed_cpp__date", "propertyName": "active_subscription_signed_cpp_date"},
+                {"columnObjectTypeId": "0-1", "columnName": "active_subscription__signed_cpp__asset_filename", "propertyName": "active_subscription_signed_cpp_asset_filename"},
+                {"columnObjectTypeId": "0-1", "columnName": "active_subscription__signed_cpp__url", "propertyName": "active_subscription_signed_cpp_url"},
+                {"columnObjectTypeId": "0-1", "columnName": "FK_Societe", "propertyName": "key_entreprise"}
+            ])
         
         payload = {
             "name": f"Import {file_type}s APM - {datetime.now().strftime('%Y-%m-%d %H:%M')}",
@@ -216,6 +297,7 @@ def upload_to_hubspot(csv_file_path, file_type, config):
     except Exception as e:
         print(f"erreur upload {file_type}: {e}")
         return False
+
 
 def main():
     if not os.path.exists(output_dir):

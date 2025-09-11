@@ -19,22 +19,38 @@ def read_csv_data(filename, max_rows=100, start_row=0):
     columns_mapping = {
         'pk_evt': 'pk_evenement',
         'IdEvt': 'id_next_apm_de_l_evenement', 
+        'IdInter': "id_intervention",
         'Nom': 'hs_event_name',
         'IdTypeEvt': 'id_type_d_evenement',
+        'TypeEvt': 'type_d_evenement',
         'Date': 'hs_start_datetime',
         'TypePresence': 'type_de_presence',
         'DateAnnulation': 'date_annulation',
+        'Ordre':'ordre_du_jour',
         'Format': 'format',
         'NbAdherents': 'nombre_d_adherents',
-        'NbParticipants': 'nombre_d_inscrits_nb',
-        'NbPresents': 'nombre_de_participants_nb',
+        'NbInvites': 'nombre_d_invites_nb',
+        'NbParticipants': 'nombre_de_participants_nb',
         'TxPresence': 'taux_de_presence_nb',
+        'TxPresence2': 'taux_de_presence_2',
+        'IdStatut': 'id_statut_de_l_evenement',
         'Statut': 'statut_de_l_evenement',
         'SatisfactionGlobale': 'satisfaction_globale',
+        'SatisfactionGlobale2': 'satisfaction_globale_2',
+        'SatisfactionGlobale3': 'satisfaction_globale_3',
         'NbEvaluations': 'nombre_d_evaluations',
+        'Adresse': 'adresse_de_l_evenement',
+        'Pays': 'pays_de_l_evenement',
+        'Region': 'region_de_l_evenement',
+        'LieuEvt': 'lieu_de_l_evenement',
+        'Dept': "departement",
+        'Ville': 'ville_de_l_evenement',
         'ZIP': 'code_postal_de_l_evenement',
         'Annulation': 'motif_d_annulation',
-        'Pays': 'pays_de_l_evenement'
+        'IdModePaiement': 'id_mode_paiement',
+        'ModePaiement': 'mode_paiement',
+        'Date_Creation': 'created_at',
+        'Date_MAJ': 'updated_at'
     }
     
     events_data = []
@@ -44,7 +60,6 @@ def read_csv_data(filename, max_rows=100, start_row=0):
         reader = csv.DictReader(file, delimiter=',')
         
         for row in reader:
-            # pagination: ignorer les lignes avant le point de départ
             if current_row < start_row:
                 current_row += 1
                 continue
@@ -60,14 +75,64 @@ def read_csv_data(filename, max_rows=100, start_row=0):
                 if csv_column in row:
                     value = row[csv_column].strip() if row[csv_column] else ""
                     if value and value.lower() not in ['null', 'none', '', "0"]:
-                        if hubspot_property == 'date_annulation':
+                        
+                        # conversion des dates
+                        if hubspot_property in ['date_annulation', 'created_at', 'updated_at']:
                             converted_date = convert_date_to_timestamp(value)
                             if converted_date:
                                 event_data[hubspot_property] = converted_date
+                        
+                        #conversion des nombres entiers 
+                        elif hubspot_property in [
+                            'pk_evenement', 'id_next_apm_de_l_evenement', 'id_intervention',
+                            'id_type_d_evenement', 'nombre_d_adherents', 'nombre_d_invites_nb',
+                            'nombre_de_participants_nb', 'nombre_d_evaluations', 'id_statut_de_l_evenement',
+                            'id_mode_paiement'
+                        ]:
+                            converted_int = convert_to_int(value)
+                            if converted_int is not None:
+                                event_data[hubspot_property] = converted_int
+                        
+                        #conversion des float
+                        elif hubspot_property in [
+                            'taux_de_presence_nb', 'taux_de_presence_2', 'satisfaction_globale',
+                            'satisfaction_globale_2', 'satisfaction_globale_3'
+                        ]:
+                            converted_float = convert_to_float(value)
+                            if converted_float is not None:
+                                event_data[hubspot_property] = converted_float
+                        
+                        # mappings spéciaux
                         elif hubspot_property == 'type_de_presence': 
                             event_data[hubspot_property] = map_type_presence(value)
                         elif hubspot_property == 'pays_de_l_evenement':  
                             event_data[hubspot_property] = CountryConverter.convert_iso_to_country(value)
+
+                        elif hubspot_property == 'type_d_evenement':
+                            mapping_type_evenement = {
+                                'Rencontre': 'Rencontre de club',
+                                'CODEV Apm': 'CODEV APM',
+                                'Autre': 'Evènements hors rencontres',     
+                                'Université': 'Séminaires réseaux',       
+                                'Rencontre de club': 'Rencontre de club',
+                                'Séminaires réseaux': 'Séminaires réseaux',
+                                'Événements hors rencontres': 'Événements hors rencontres',  
+                                'Séminaires d\'accueil': 'Séminaires d\'accueil',
+                                'CODEV APM': 'CODEV APM',
+                                'Tous experts': 'Tous experts',
+                                'Voyage': 'Voyage',
+                                'Interclubs': 'Interclubs',
+                                'Convention': 'Convention'
+                            }
+                            
+                            mapped_value = mapping_type_evenement.get(value)
+                            if mapped_value:
+                                event_data[hubspot_property] = mapped_value
+                            else:
+                                print(f"Valeur type événement non mappée ignorée: '{value}'")
+
+
+                        
                         else:
                             event_data[hubspot_property] = value
 
@@ -92,6 +157,32 @@ def read_csv_data(filename, max_rows=100, start_row=0):
     return events_data
 
 
+def convert_to_int(value):
+    try:
+        if isinstance(value, str):
+            cleaned_value = value.strip().replace(',', '').replace(' ', '')
+            if cleaned_value and cleaned_value.replace('.', '').isdigit():
+                return int(float(cleaned_value))
+        elif isinstance(value, (int, float)):
+            return int(value)
+        return None
+    except (ValueError, TypeError):
+        return None
+
+
+def convert_to_float(value):
+    try:
+        if isinstance(value, str):
+            cleaned_value = value.strip().replace(',', '.').replace(' ', '')
+            if cleaned_value and cleaned_value.replace('.', '').replace('-', '').isdigit():
+                return float(cleaned_value)
+        elif isinstance(value, (int, float)):
+            return float(value)
+        return None
+    except (ValueError, TypeError):
+        return None
+
+
 def create_hubspot_payload(events_data):
     hubspot_inputs = []
     
@@ -105,7 +196,7 @@ def create_hubspot_payload(events_data):
         
         # séparation entre champs standard hubspot et propriétés personnalisées
         for key, value in event.items():
-            if key not in ['external_event_id', 'event_name', 'start_datetime', 'hs_event_name'] and value:
+            if key not in ['external_event_id', 'event_name', 'start_datetime', 'hs_event_name'] and value is not None:
                 custom_properties.append({
                     "name": key,
                     "value": str(value)
@@ -144,15 +235,47 @@ def send_to_hubspot(payload, access_token):
         return None
 
 def convert_date_to_timestamp(date_string):
+    """Convertit une date en timestamp milliseconds pour HubSpot"""
     if not date_string or date_string.lower() in ['null', 'none', '']:
         return None
     try:
-        date_obj = datetime.strptime(date_string + ' 00:00:00', '%Y-%m-%d %H:%M:%S')
-        date_obj = date_obj.replace(tzinfo=timezone.utc)
-        timestamp_ms = int(date_obj.timestamp() * 1000)
-        return str(timestamp_ms)
-    except:
+        # Essayer différents formats de date
+        date_formats = [
+            '%Y-%m-%d %H:%M:%S%z',      # NOUVEAU: avec timezone +00:00
+            '%Y-%m-%d %H:%M:%S+00:00',  # NOUVEAU: format explicite timezone
+            '%Y-%m-%d %H:%M:%S',
+            '%Y-%m-%d',
+            '%d/%m/%Y %H:%M:%S',
+            '%d/%m/%Y',
+            '%Y-%m-%d %H:%M'
+        ]
+        
+        for date_format in date_formats:
+            try:
+                if date_format == '%Y-%m-%d':
+                    date_obj = datetime.strptime(date_string, date_format)
+                    date_obj = date_obj.replace(hour=0, minute=0, second=0, tzinfo=timezone.utc)
+                elif '%z' in date_format or '+00:00' in date_format:
+                    # Pour les dates avec timezone
+                    date_obj = datetime.strptime(date_string, date_format)
+                    # Si pas de timezone info, ajouter UTC
+                    if date_obj.tzinfo is None:
+                        date_obj = date_obj.replace(tzinfo=timezone.utc)
+                else:
+                    date_obj = datetime.strptime(date_string, date_format)
+                    date_obj = date_obj.replace(tzinfo=timezone.utc)
+                
+                timestamp_ms = int(date_obj.timestamp() * 1000)
+                return str(timestamp_ms)
+            except ValueError:
+                continue
+        
+        print(f"Format de date non reconnu: {date_string}")
         return None
+    except Exception as e:
+        print(f"Erreur conversion date {date_string}: {e}")
+        return None
+
 
 
 def map_type_presence(value):
@@ -164,6 +287,7 @@ def map_type_presence(value):
         'Mixte': 'Mixte'
     }
     return mapping.get(value, value)  
+
 
 def process_all_events_in_batches(filename, access_token, batch_size=100):
     total_processed = 0
@@ -196,7 +320,6 @@ def process_all_events_in_batches(filename, access_token, batch_size=100):
             total_errors += len(payload["inputs"])
             print(f"erreur dans le lot - {len(payload['inputs'])} événements échoués")
         
-        # arrêter si c'est le dernier lot (moins d'événements que la taille du lot)
         if len(events_data) < batch_size:
             break
             
@@ -206,6 +329,5 @@ def process_all_events_in_batches(filename, access_token, batch_size=100):
     return total_processed
 
 
-# lancement du traitement 
 total_imported = process_all_events_in_batches(filename, access_token)
 print(f"import termine: {total_imported} evenements")

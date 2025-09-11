@@ -20,3 +20,4 @@ tables:
   ass_evt_ogz : dwh.event_organizer
   ass_exp_exps : dwh.expert_expertise
   sollicitation: dwh.mv_sollicitation
+  cycle : dwh.mv_cycle

@@ -16,19 +16,25 @@ COMPANY_COLUMNS = [
     'PKSociete',
     'Nom',           
     'Email',         
-    'Phone',       
+    'Phone', 
+    'Secteur',     
     'Pays',         
     'City',         
     'ZipCode',      
-    'Address',        
-    'Effectif',       
+    'Address', 
+    'Dept',
+    'Region',
+    'IdEffectif',      
+    'Effectif', 
+    'Revenue',      
     'SIRET',          
     'SIREN',         
     'TVA',            
     'TVAInter',     
     'TVAOption',    
     'IdMode',       
-    'Mode'            
+    'Mode',
+    'TiersPayeur'         
 ]
 
 def convert_country_for_company(value):
@@ -41,7 +47,6 @@ def convert_country_for_company(value):
     return converted
 
 def clean_company_data(df):
-
     processed_data = []
     
     for _, row in df.iterrows():
@@ -52,9 +57,14 @@ def clean_company_data(df):
             
             if column == 'Pays':  
                 data[column] = convert_country_for_company(value)
-            elif column in ['Effectif', 'IdMode']:  
+            elif column in ['Effectif', 'IdMode', 'IdEffectif']:  
                 try:
                     data[column] = int(float(value)) if value and str(value).replace('.', '').isdigit() else ""
+                except:
+                    data[column] = ""
+            elif column == 'Revenue':  
+                try:
+                    data[column] = float(value) if value and str(value).replace('.', '').replace(',', '').isdigit() else ""
                 except:
                     data[column] = ""
             else:
@@ -142,6 +152,11 @@ def upload_companies_to_hubspot(csv_file_path, available_columns):
                             },
                             {
                                 "columnObjectTypeId": "0-2",
+                                "columnName": "Secteur",
+                                "propertyName": "secteur"
+                            },
+                            {
+                                "columnObjectTypeId": "0-2",
                                 "columnName": "Pays",
                                 "propertyName": "country"  
                             },
@@ -162,8 +177,28 @@ def upload_companies_to_hubspot(csv_file_path, available_columns):
                             },
                             {
                                 "columnObjectTypeId": "0-2",
+                                "columnName": "Dept",
+                                "propertyName": "departement"
+                            },
+                            {
+                                "columnObjectTypeId": "0-2",
+                                "columnName": "Region",
+                                "propertyName": "region"
+                            },
+                            {
+                                "columnObjectTypeId": "0-2",
+                                "columnName": "IdEffectif",
+                                "propertyName": "id_tranche_effectif"
+                            },
+                            {
+                                "columnObjectTypeId": "0-2",
                                 "columnName": "Effectif",
                                 "propertyName": "effectif"
+                            },
+                            {
+                                "columnObjectTypeId": "0-2",
+                                "columnName": "Revenue",
+                                "propertyName": "chiffres_affaires"
                             },
                             {
                                 "columnObjectTypeId": "0-2",
@@ -199,6 +234,11 @@ def upload_companies_to_hubspot(csv_file_path, available_columns):
                                 "columnObjectTypeId": "0-2",
                                 "columnName": "Mode",
                                 "propertyName": "mode_de_r_glement"
+                            },
+                            {
+                                "columnObjectTypeId": "0-2",
+                                "columnName": "TiersPayeur",
+                                "propertyName": "compte_tiers_payeur"
                             }
                         ]
                     }
