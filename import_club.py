@@ -25,7 +25,7 @@ def convert_date_format(date_string):
         '%Y-%m-%d',    # YYYY-MM-DD
         '%d/%m/%Y',    # DD/MM/YYYY  
         '%m/%d/%Y',    # MM/DD/YYYY
-        '%Y/%m/%d',    # YYYY/MM/DD
+        '%Y/%m/%d',    # YYYY/MM/DD 
     ]
     
     for input_format in input_formats:
