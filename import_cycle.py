@@ -78,11 +78,9 @@ def clean_transaction_data(df):
             if column in ['PKCycle']:
                 data[column] = str(value).strip() if value and str(value).strip() and str(value).lower() not in ['nan', 'null', 'none'] else ""
 
-            # 🆕 TRAITEMENT SÉPARÉ POUR LES UUIDs (FK_*)
             elif column in ['FK_Club', 'FK_Club2', 'FK_Animateur', 'FK_Region', 'FK_Adherent']:
                 data[column] = str(value).strip() if value and str(value).strip() and str(value).lower() not in ['nan', 'null', 'none'] else ""
 
-            # ✅ VRAIS ENTIERS SEULEMENT
             elif column in ['Id_MotifSortie', 'Id_TypeSortie', 'FK_Invoice', 'Membre_Index', 
                         'Id_Membre', 'Id_Taux', 'Id_Proba_renew', 'sent_count_cpp_to_sign', 
                         'Id_Offrespeciale', 'Id_Statut_Adherent']:
@@ -95,7 +93,7 @@ def clean_transaction_data(df):
                 except Exception as e:
                     data[column] = ""
             
-            # Conversion des montants et pourcentages
+            # conversion des montants et pourcentages
             elif column in ['DiscountManuel', 'Taux', 'Proba_renew', 'Cotisation_TTC', 'Cotisation_HT', 'TVA']:
                 try:
                     if value and str(value).strip() and str(value).lower() not in ['nan', 'null', 'none']:
@@ -117,11 +115,10 @@ def clean_transaction_data(df):
             elif column in ['Renew', 'sent_cpp', 'sent_cpp_to_sign']:
                 data[column] = normalize_boolean(value)
                         
-            # Conversion des dates (format ISO pour HubSpot)
+            #conversion des dates 
             elif column in ['DateCreationCycle', 'DateMAJ', 'DateCreation', 'signed_cpp__date']:
                 data[column] = convert_date_to_hubspot_format(value, "datetime")
 
-            # Dates seules (format YYYY-MM-DD)
             elif column in ['DateDebut', 'DateFin', 'DateDesinscription']:
                 data[column] = convert_date_to_hubspot_format(value, "date")
 
@@ -136,13 +133,13 @@ def clean_transaction_data(df):
         
         if prenom and nom:
             data['dealname'] = f"[CYCLE] {prenom} {nom}"
-        elif nom:  # Si pas de prénom
+        elif nom:  
             data['dealname'] = f"[CYCLE] {nom}"
-        else:  # Fallback avec PKCycle
+        else:  
             pk_cycle = data.get('PKCycle', '')
             data['dealname'] = f"[CYCLE] {pk_cycle}" if pk_cycle else "[CYCLE] Inconnu"
         
-        # Pipeline et dealstage fixes
+        #pipeline et dealstage fixes
         data['pipeline'] = "1902842079"
         data['dealstage'] = "2585825492"
         
@@ -151,14 +148,14 @@ def clean_transaction_data(df):
     return pd.DataFrame(processed_data)
 
 
+
 def normalize_membre_type(value):
     if not value or str(value).lower() in ['nan', 'null', 'none', '']:
         return ""
     
-    # Convertir en string et nettoyer
     membre_type = str(value).strip().lower()
     
-    # Mapping des variations courantes
+    # mapping des membres
     type_mapping = {
         'member': 'Membre',
     }
@@ -171,7 +168,7 @@ def normalize_boolean(value):
     
     value_str = str(value).lower().strip()
     
-    # Mapping des valeurs booléennes vers français
+    #mapping des valeurs booléennes vers français
     boolean_mapping = {
         'true': 'Oui',
         'yes': 'Oui',
@@ -192,7 +189,7 @@ def convert_date_to_hubspot_format(date_string, field_type="datetime"):
     try:
         date_string = str(date_string).strip()
         
-        # Formats de date supportés
+        #formats de date supportés
         date_formats = [
             '%Y-%m-%d %H:%M:%S%z',
             '%Y-%m-%d %H:%M:%S+00:00',
@@ -208,7 +205,6 @@ def convert_date_to_hubspot_format(date_string, field_type="datetime"):
             try:
                 if date_format == '%Y-%m-%d':
                     date_obj = datetime.strptime(date_string, date_format)
-                    # Pour les dates seules, mettre à minuit UTC
                     date_obj = date_obj.replace(hour=0, minute=0, second=0, tzinfo=timezone.utc)
                 else:
                     date_obj = datetime.strptime(date_string, date_format)
@@ -222,12 +218,9 @@ def convert_date_to_hubspot_format(date_string, field_type="datetime"):
             print(f"Format de date non reconnu: {date_string}")
             return ""
         
-        # Selon le type de champ HubSpot
         if field_type == "date":
-            # Pour les propriétés "date" : format YYYY-MM-DD
             return date_obj.strftime('%Y-%m-%d')
         else:
-            # Pour les propriétés "datetime" : timestamp en millisecondes
             timestamp_ms = int(date_obj.timestamp() * 1000)
             return str(timestamp_ms)
             
@@ -243,20 +236,14 @@ def process_transactions():
     try:
         print("Lecture du fichier CSV...")
         df = pd.read_csv(input_file, dtype=str, low_memory=False)
-        
-        
+
         available_columns = [col for col in TRANSACTION_COLUMNS if col in df.columns]
-        
-        
         
         print(f"colonnes disponibles: {len(available_columns)}/{len(TRANSACTION_COLUMNS)}")
         
         df_filtered = df[available_columns]
         
-        df_cleaned = clean_transaction_data(df_filtered)
-        
-        # 🔍 DEBUG : Vérifier les données après nettoyage
-       
+        df_cleaned = clean_transaction_data(df_filtered)       
         
         df_cleaned.to_csv(output_path, index=False)
         
