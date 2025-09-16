@@ -2,7 +2,10 @@ tables:
   regions : dwh.mv_region
   clubs : dwh.mv_club
   societes : dwh.mv_societe
-  adherents : dwh.mv_adherent
+  adherents_actifs : dwh.mv_adherent_actif
+  adherents_alumnis : dwh.mv_adherent_alumni
+  adherents_inactifs : dwh.mv_adherent_inactif
+  adherents_sans_alumnis : dwh.mv_adherent_sans_alumni
   # animateurs : dwh.mv_animateur
   experts : dwh.mv_expert
   permanents : dwh.mv_permanent

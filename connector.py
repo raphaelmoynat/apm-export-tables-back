@@ -37,12 +37,12 @@ conn = psycopg2.connect(
 chemin_export = './exports'
 
 IMPORT_SCRIPTS = {
-    'dwh.mv_club': ['import_club.py'],
+    'dwh.mv_club': ['import_club_hubdb.py', 'import_club_object.py'],
     'dwh.mv_region': ['import_region.py'],
     'dwh.mv_expert': ['import_contact.py expert'],
     'dwh.mv_permanent': ['import_contact.py permanent'], 
     'dwh.mv_referent': ['import_contact.py referent'],
-    'dwh.mv_adherent': ['import_contact.py adherent'],
+    'dwh.mv_adherent_actif': ['import_contact.py adherent'],
     'dwh.mv_societe': ['import_societe.py'],
     'dwh.mv_evt': ["import_event_custom.py", "import_event_marketing.py"],
     'dwh.mv_sollicitation': ["import_sollicitation.py"],
