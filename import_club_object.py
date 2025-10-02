@@ -8,7 +8,7 @@ from country_converter import CountryConverter
 
 load_dotenv()
 
-output_dir = 'filtered'
+output_dir = '/root/apm/infocentre/apm-export-tables-back/filtered'
 HUBSPOT_API_KEY = os.getenv("PROD_KEY")
 HUBSPOT_IMPORT_API_URL = 'https://api.hubapi.com/crm/v3/imports'
 
@@ -106,7 +106,7 @@ def clean_club_data(df):
     return pd.DataFrame(processed_data)
 
 def process_clubs():
-    input_file = './exports/dwh.mv_club.csv'
+    input_file = '/root/apm/infocentre/apm-export-tables-back/exports/dwh.mv_club.csv'
     output_file = 'dwh_club_filtered.csv'
     output_path = os.path.join(output_dir, output_file)
     

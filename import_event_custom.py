@@ -8,7 +8,7 @@ from country_converter import CountryConverter
 
 load_dotenv()
 
-output_dir = 'filtered'
+output_dir = '/root/apm/infocentre/apm-export-tables-back/filtered'
 HUBSPOT_API_KEY = os.getenv("PROD_KEY")
 HUBSPOT_IMPORT_API_URL = 'https://api.hubapi.com/crm/v3/imports'
 
@@ -214,7 +214,7 @@ def clean_data(df):
     return pd.DataFrame(cleaned_data)
 
 def process_events():
-    input_file = './exports/dwh.mv_evt.csv'
+    input_file = '/root/apm/infocentre/apm-export-tables-back/exports/dwh.mv_evt.csv'
     output_file = 'dwh_evenement_filtered.csv'
     output_path = os.path.join(output_dir, output_file)
     

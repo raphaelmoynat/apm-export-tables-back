@@ -13,7 +13,7 @@ load_dotenv()
 # config
 API_KEY =  os.getenv("PROD_KEY")
 TABLE_ID = "348959970"  
-CSV_FILE = "./exports/dwh.mv_club.csv"  
+CSV_FILE = "/root/apm/infocentre/apm-export-tables-back/exports/dwh.mv_club.csv"  
 
 def convert_date_format(date_string):
     if not date_string or date_string.strip() == '':

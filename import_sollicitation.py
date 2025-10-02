@@ -8,7 +8,7 @@ import time
 
 load_dotenv()
 
-filename = "./exports/dwh.mv_sollicitation.csv"  
+filename = "/root/apm/infocentre/apm-export-tables-back/exports/dwh.mv_sollicitation.csv"  
 access_token = os.getenv("PROD_KEY")
 max_solicitations = 1000 
 batch_size = 10

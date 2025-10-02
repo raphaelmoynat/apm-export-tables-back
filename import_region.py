@@ -10,7 +10,7 @@ load_dotenv()
 # compte APM
 API_KEY = os.getenv("PROD_KEY")
 TABLE_ID = "414751957"  
-CSV_FILE = "./exports/dwh.mv_region.csv"
+CSV_FILE = "/root/apm/infocentre/apm-export-tables-back/exports/dwh.mv_region.csv"
 
 # récupère les clés existantes dans hubdb
 def get_hubdb_keys():

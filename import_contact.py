@@ -10,7 +10,7 @@ from country_converter import CountryConverter
 load_dotenv()
 
 # config 
-output_dir = 'filtered'
+output_dir = '/root/apm/infocentre/apm-export-tables-back/filtered'
 HUBSPOT_API_KEY = os.getenv("PROD_KEY")
 HUBSPOT_IMPORT_API_URL = 'https://api.hubapi.com/crm/v3/imports'
 
@@ -20,31 +20,28 @@ FILE_TYPES = {
         'pk': 'PKExpert', 
         'hubspot_pk': 'pk_membre', 
         'profil_apm': 'Expert',
-        'specific_columns': ['SocieteFacturation', 'TypeTVA', 'IdTVAInter', 'accounting__vat_international', 'Id Permanent']
+        'specific_columns': ['SocieteFacturation', 'TypeTVA', 'IdTVAInter', 'accounting__vat_international', 'Id Permanent', 'IdExpert']
     },
     'permanent': {
         'pk': 'PKPermanent', 
         'hubspot_pk': 'pk_membre', 
         'profil_apm': 'Permanent',
-        'specific_columns': []
+        'specific_columns': ['Id']
     }, 
     'referent': {
         'pk': 'PKReferent', 
         'hubspot_pk': 'pk_membre', 
         'profil_apm': 'Référent',
-        'specific_columns': []
+        'specific_columns': ['Id']
     },
-    'adherent': {
+    'adherent_actif': {
         'pk': 'PKAdherent', 
         'hubspot_pk': 'pk_membre', 
         'profil_apm': 'Adhérent',
         'specific_columns': ['active_subscription__signed_cpp__filename', 'active_subscription__signed_cpp__date', 
-                           'active_subscription__signed_cpp__asset_filename', 'active_subscription__signed_cpp__url', 'FK_Societe']
+                           'active_subscription__signed_cpp__asset_filename', 'active_subscription__signed_cpp__url', 'FK_Societe', 'Id']
     }
 }
-
-
-
 
 # colonnes communes
 BASE_COLUMNS = [
@@ -138,7 +135,7 @@ def convert_statut_pro(value):
 # traite un fichier selon son type
 def process_file(file_type):
     config = FILE_TYPES[file_type]
-    input_file = f'./exports/dwh.mv_{file_type}.csv'
+    input_file = f'/root/apm/infocentre/apm-export-tables-back/exports/dwh.mv_{file_type}.csv'
     output_file = f'dwh_{file_type}_filtered.csv'
     output_path = os.path.join(output_dir, output_file)
 
@@ -152,7 +149,7 @@ def process_file(file_type):
         if 'Prénom' in df.columns:
             df = df.rename(columns={'Prénom': 'Prenom'})
         
-        #inclure les colonnes de base + PK + colonnes spécifiques
+        # inclure les colonnes de base + PK + colonnes spécifiques
         columns_to_keep = [config['pk']] + BASE_COLUMNS + config.get('specific_columns', [])
 
         if file_type == 'expert' and 'Statut expert' not in df.columns:
@@ -180,15 +177,21 @@ def process_file(file_type):
                     data[column] = convert_country_field(value, "Nationalité")
                 elif column == 'StatutPro':
                     data[column] = convert_statut_pro(value)
-
-
-
                 elif column == 'Statut expert':
                     data[column] = str(value).strip() if value else ""
                 else:
                     data[column] = str(value).strip() if value else ""
             
-            data['profil_apm'] = config['profil_apm']
+            # ➡️ Ajout des colonnes PK
+            data['pk_membre'] = data[config['pk']]
+            role_property = f"pk_{file_type}" if file_type != "adherent_actif" else "pk_adherent"
+            data[role_property] = data[config['pk']]
+
+            if config['pk'] in data:
+                data.pop(config['pk'])
+            
+            # profil apm
+            data['profil_apm'] = ";" + config['profil_apm']
             
             processed_data.append(data)
         
@@ -209,14 +212,17 @@ def process_file(file_type):
         return False
 
 
-# upload vers hubspot
+#upload vers hubspot
 def upload_to_hubspot(csv_file_path, file_type, config):
     try:
         headers = {'Authorization': f'Bearer {HUBSPOT_API_KEY}'}
-        
-        # mapping de base
+
+        role_property = f"pk_{file_type}" if file_type != "adherent_actif" else "pk_adherent"
+
+        # mapping de base avec PKs
         mappings = [
-            {"columnObjectTypeId": "0-1", "columnName": config['pk'], "propertyName": config['hubspot_pk']},
+            {"columnObjectTypeId": "0-1", "columnName": "pk_membre", "propertyName": "pk_membre"},
+            {"columnObjectTypeId": "0-1", "columnName": role_property, "propertyName": role_property},
             {"columnObjectTypeId": "0-1", "columnName": "Email", "propertyName": "email", "columnType": "HUBSPOT_ALTERNATE_ID"},
             {"columnObjectTypeId": "0-1", "columnName": "Civilite", "propertyName": "civilite"},
             {"columnObjectTypeId": "0-1", "columnName": "Nom", "propertyName": "lastname"},
@@ -245,9 +251,10 @@ def upload_to_hubspot(csv_file_path, file_type, config):
             {"columnObjectTypeId": "0-1", "columnName": "profil_apm", "propertyName": "profil_apm"}
         ]
 
-        #mappings spécifiques par type
+        # mappings spécifiques
         if file_type == 'expert':
             mappings.extend([
+                {"columnObjectTypeId": "0-1", "columnName": "IdExpert", "propertyName": "next_apm_id"},
                 {"columnObjectTypeId": "0-1", "columnName": "Statut expert", "propertyName": "statut_next_apm"},
                 {"columnObjectTypeId": "0-1", "columnName": "SocieteFacturation", "propertyName": "societe_facturation"},
                 {"columnObjectTypeId": "0-1", "columnName": "TypeTVA", "propertyName": "type_tva"},
@@ -256,8 +263,19 @@ def upload_to_hubspot(csv_file_path, file_type, config):
                 {"columnObjectTypeId": "0-1", "columnName": "Id Permanent", "propertyName": "id_permanent"}
             ])
         
-        elif file_type == 'adherent':
+        elif file_type == 'permanent':
             mappings.extend([
+                {"columnObjectTypeId": "0-1", "columnName": "Id", "propertyName": "next_apm_id"},
+            ])
+
+        elif file_type == 'referent':
+            mappings.extend([
+                {"columnObjectTypeId": "0-1", "columnName": "Id", "propertyName": "next_apm_id"},
+            ])
+        
+        elif file_type == 'adherent_actif':
+            mappings.extend([
+                {"columnObjectTypeId": "0-1", "columnName": "Id", "propertyName": "next_apm_id"},
                 {"columnObjectTypeId": "0-1", "columnName": "active_subscription__signed_cpp__filename", "propertyName": "active_subscription_signed_cpp_filename"},
                 {"columnObjectTypeId": "0-1", "columnName": "active_subscription__signed_cpp__date", "propertyName": "active_subscription_signed_cpp_date"},
                 {"columnObjectTypeId": "0-1", "columnName": "active_subscription__signed_cpp__asset_filename", "propertyName": "active_subscription_signed_cpp_asset_filename"},

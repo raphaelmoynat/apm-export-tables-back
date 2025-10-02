@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 
 load_dotenv()
 
-output_dir = 'filtered'
+output_dir = '/root/apm/infocentre/apm-export-tables-back/filtered'
 HUBSPOT_API_KEY = os.getenv("PROD_KEY")
 HUBSPOT_IMPORT_API_URL = 'https://api.hubapi.com/crm/v3/imports'
 
@@ -229,7 +229,7 @@ def convert_date_to_hubspot_format(date_string, field_type="datetime"):
         return ""
 
 def process_transactions():
-    input_file = './exports/dwh.mv_cycle.csv'
+    input_file = '/root/apm/infocentre/apm-export-tables-back/exports/dwh.mv_cycle.csv'
     output_file = 'dwh_transactions_filtered.csv'
     output_path = os.path.join(output_dir, output_file)
     

@@ -10,7 +10,7 @@ from country_converter import CountryConverter
 load_dotenv()
 
 # configuration
-filename = "./exports/dwh.mv_evt.csv"
+filename = "/root/apm/infocentre/apm-export-tables-back/exports/dwh.mv_evt.csv"
 access_token = os.getenv("PROD_KEY")
 
 

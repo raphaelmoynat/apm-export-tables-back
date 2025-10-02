@@ -9,7 +9,7 @@ import time
 load_dotenv()
 
 # Config
-filename = "./exports/dwh.mv_participation.csv"  
+filename = "/root/apm/infocentre/apm-export-tables-back/exports/dwh.mv_participation.csv"  
 access_token = os.getenv("PROD_KEY")
 max_participations = 1
 batch_size = 10
