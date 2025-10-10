@@ -40,8 +40,10 @@ conn = psycopg2.connect(
 chemin_export = '/root/apm/infocentre/apm-export-tables-back/exports'
 
 IMPORT_SCRIPTS = {
-    'dwh.mv_club': ['/root/apm/infocentre/apm-export-tables-back/import_club_hubdb.py', '/root/apm/infocentre/apm-export-tables-back/import_club_object.py'],
+    'dwh.mv_club': ['/root/apm/infocentre/apm-export-tables-back/import_club_object.py'],
     'dwh.mv_region': ['/root/apm/infocentre/apm-export-tables-back/import_region.py'],
+    'dwh.mv_expertise': ['/root/apm/infocentre/apm-export-tables-back/import_expertises_hubdb.py', '/root/apm/infocentre/apm-export-tables-back/import_expertises_object.py'],
+    'dwh.mv_cycle': ['/root/apm/infocentre/apm-export-tables-back/import_cycle.py'],
     'dwh.mv_expert': ['/root/apm/infocentre/apm-export-tables-back/import_contact.py expert'],
     'dwh.mv_permanent': ['/root/apm/infocentre/apm-export-tables-back/import_contact.py permanent'], 
     'dwh.mv_referent': ['/root/apm/infocentre/apm-export-tables-back/import_contact.py referent'],
@@ -49,8 +51,16 @@ IMPORT_SCRIPTS = {
     'dwh.mv_societe': ['/root/apm/infocentre/apm-export-tables-back/import_societe.py'],
     'dwh.mv_evt': ["/root/apm/infocentre/apm-export-tables-back/import_event_custom.py", "/root/apm/infocentre/apm-export-tables-back/import_event_marketing.py"],
     'dwh.mv_sollicitation': ["/root/apm/infocentre/apm-export-tables-back/import_sollicitation.py"],
-    #'dwh.mv_participation': ["/root/apm/infocentre/apm-export-tables-back/import_participation.py"],
+    #'dwh.mv_participation': ["/root/apm/infocentre/apm-export-tables-back/import_participation.py"]
 }
+
+#dictionnaire pour les scripts d'associations
+ASSOCIATION_SCRIPTS = [
+    '/root/apm/infocentre/apm-export-tables-back/associations_event_club.py',
+    '/root/apm/infocentre/apm-export-tables-back/associations_event_expert.py',
+    '/root/apm/infocentre/apm-export-tables-back/associations_event_expertise.py',
+    '/root/apm/infocentre/apm-export-tables-back/associations_expert_expertise.py'
+]
 
 def clean_exports_directory():
     if os.path.exists(chemin_export):
@@ -112,7 +122,7 @@ def export_all_tables():
     if failed_tables:
         print(f"tables échouées : {', '.join(failed_tables)}")
     
-    #continuer même si certains exports échouent
+    # Continuer même si certains exports échouent
     return success_count, failed_tables
 
 def run_import_script(script_command, table_name):
@@ -184,6 +194,55 @@ def send_log_slack(message):
     except:
         print("Erreur envoi Slack")
 
+def run_association_check():
+    try:
+        print("vérification des associations en cours...")
+        
+        result = subprocess.run([sys.executable, '/root/apm/infocentre/apm-export-tables-back/check_associations_exists.py'], 
+                              capture_output=True, text=True)
+        
+        if result.returncode == 0:
+            print("vérification des associations réussie")
+            return True
+        else:
+            print(f"erreur lors de la vérification des associations: {result.stderr}")
+            return False
+            
+    except Exception as e:
+        print(f"erreur : {e}")
+        return False
+
+def run_association_scripts():
+    print("début des scripts d'associations...")
+    success_count = 0
+    total_scripts = len(ASSOCIATION_SCRIPTS)
+    
+    for i, script_path in enumerate(ASSOCIATION_SCRIPTS):
+        try:
+            script_name = os.path.basename(script_path)
+            print(f"exécution de {script_name}...")
+            
+            result = subprocess.run([sys.executable, script_path], 
+                                  capture_output=True, text=True)
+            
+            if result.returncode == 0:
+                print(f"script {script_name} réussi")
+                success_count += 1
+            else:
+                print(f"erreur dans {script_name}: {result.stderr}")
+            
+            #pause entre les scripts 
+            if i < total_scripts - 1:
+                print("Attente de 1 minute avant le prochain script d'association...")
+                time.sleep(60)
+                
+        except Exception as e:
+            print(f"Erreur lors de l'exécution de {script_path}: {e}")
+    
+    print(f"Scripts d'associations terminés: {success_count}/{total_scripts} réussis")
+    return success_count, total_scripts
+
+
 def main():
     start_time = time.time()  
     print("start : ", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
@@ -193,8 +252,30 @@ def main():
     #exporter toutes les tables 
     success_exports, failed_tables = export_all_tables()
     
-    #lancer tous les imports possibles
+    #lancer tous les imports
     success_imports, total_possible_imports = run_all_imports()
+    
+    #vérifier les associations et créer les CSV filtrés
+    association_check_success = False
+    association_success = 0
+    total_associations = 0
+    
+    if success_exports > 0:  
+        print("\n" + "="*50)
+        print("PHASE ASSOCIATIONS")
+        print("="*50)
+        
+        #vérification des associations
+        association_check_success = run_association_check()
+        
+        if association_check_success:
+            print("Attente de 1 minute avant les scripts d'associations...")
+            time.sleep(60)
+            
+            #scripts d'associations
+            association_success, total_associations = run_association_scripts()
+        else:
+            print("Échec de la vérification des associations - scripts d'associations ignorés")
     
     #calculer la durée
     end_time = time.time()
@@ -203,21 +284,33 @@ def main():
     duration_remaining_seconds = duration_seconds % 60
     
     #résumé 
-    print(f"tables exportées : {success_exports}/{len(databases)}")
-    print(f"imports réussis : {success_imports}/{total_possible_imports}")
-    print("end : ", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+    print(f"\n" + "="*50)
+    print("RÉSUMÉ FINAL")
+    print("="*50)
+    print(f"Tables exportées : {success_exports}/{len(databases)}")
+    print(f"Imports réussis : {success_imports}/{total_possible_imports}")
+    if total_associations > 0:
+        print(f"Associations créées : {association_success}/{total_associations}")
+    print("End : ", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
     
-    #log slack simple
-    if success_exports == len(databases) and success_imports == total_possible_imports:
-        message = f"tables exportées : {len(databases)}\nimports réussis : {success_imports}/{total_possible_imports}\ndurée : {duration_minutes}m {duration_remaining_seconds}s"
-    elif success_exports == 0:
-        message = "APM: Échec des exports"
+    # log slack 
+    if total_associations > 0:
+        if success_exports == len(databases) and success_imports == total_possible_imports and association_success == total_associations:
+            message = f"Tables exportées : {len(databases)}\nImports réussis : {success_imports}/{total_possible_imports}\nAssociations réussies : {association_success}/{total_associations}\nDurée : {duration_minutes}m {duration_remaining_seconds}s"
+        else:
+            message = f"Tables exportées : {success_exports}/{len(databases)}\nImports réussis : {success_imports}/{total_possible_imports}\nAssociations réussies : {association_success}/{total_associations}\nDurée : {duration_minutes}m {duration_remaining_seconds}s"
     else:
-        message = f"tables exportées : {success_exports}/{len(databases)}\nimports réussis : {success_imports}/{total_possible_imports}\ndurée : {duration_minutes}m {duration_remaining_seconds}s"
+        if success_exports == len(databases) and success_imports == total_possible_imports:
+            message = f"Tables exportées : {len(databases)}\nImports réussis : {success_imports}/{total_possible_imports}\nDurée : {duration_minutes}m {duration_remaining_seconds}s"
+        elif success_exports == 0:
+            message = "APM: Échec des exports"
+        else:
+            message = f"Tables exportées : {success_exports}/{len(databases)}\nImports réussis : {success_imports}/{total_possible_imports}\nDurée : {duration_minutes}m {duration_remaining_seconds}s"
     
     send_log_slack(message)
     
-    print("terminé")
+    print("Terminé")
+
 
 if __name__ == "__main__":
     main()
