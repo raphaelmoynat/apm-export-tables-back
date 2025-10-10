@@ -112,7 +112,7 @@ def export_all_tables():
     if failed_tables:
         print(f"tables échouées : {', '.join(failed_tables)}")
     
-    # Continuer même si certains exports échouent
+    #continuer même si certains exports échouent
     return success_count, failed_tables
 
 def run_import_script(script_command, table_name):

@@ -25,12 +25,16 @@ def read_csv_data(filename, max_rows=100, start_row=0):
         'TypeEvt': 'type_d_evenement',
         'Date': 'hs_start_datetime',
         'TypePresence': 'type_de_presence',
+        'IdTypePresence':'idtypepresence',
         'DateAnnulation': 'date_annulation',
+        'IdFormat':'idformat',
         'Ordre':'ordre_du_jour',
         'Format': 'format',
         'NbAdherents': 'nombre_d_adherents',
         'NbInvites': 'nombre_d_invites_nb',
         'NbParticipants': 'nombre_de_participants_nb',
+        'NbPresents': 'nombre_de_presents',
+        'NbPresents2': 'nombre_de_presents_2',
         'TxPresence': 'taux_de_presence_nb',
         'TxPresence2': 'taux_de_presence_2',
         'IdStatut': 'id_statut_de_l_evenement',
@@ -43,10 +47,13 @@ def read_csv_data(filename, max_rows=100, start_row=0):
         'Pays': 'pays_de_l_evenement',
         'Region': 'region_de_l_evenement',
         'LieuEvt': 'lieu_de_l_evenement',
+        'NumDept': 'n_departement',
         'Dept': "departement",
         'Ville': 'ville_de_l_evenement',
         'ZIP': 'code_postal_de_l_evenement',
+        'IdAnnulation': 'id_annulation',
         'Annulation': 'motif_d_annulation',
+        'Timzeone': 'fuseau_horaire',
         'IdModePaiement': 'id_mode_paiement',
         'ModePaiement': 'mode_paiement',
         'Date_Creation': 'created_at',
@@ -239,10 +246,16 @@ def convert_date_to_timestamp(date_string):
     if not date_string or date_string.lower() in ['null', 'none', '']:
         return None
     try:
+        date_string = str(date_string).strip()
+        
+        # 🚀 CORRECTION : Normaliser +00 vers +00:00
+        if date_string.endswith('+00'):
+            date_string = date_string[:-3] + '+00:00'
+        
         # Essayer différents formats de date
         date_formats = [
-            '%Y-%m-%d %H:%M:%S%z',      # NOUVEAU: avec timezone +00:00
-            '%Y-%m-%d %H:%M:%S+00:00',  # NOUVEAU: format explicite timezone
+            '%Y-%m-%d %H:%M:%S+00:00',  # ← Format principal avec timezone normalisée
+            '%Y-%m-%d %H:%M:%S%z',      # avec timezone
             '%Y-%m-%d %H:%M:%S',
             '%Y-%m-%d',
             '%d/%m/%Y %H:%M:%S',

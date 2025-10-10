@@ -20,36 +20,36 @@ FILE_TYPES = {
         'pk': 'PKExpert', 
         'hubspot_pk': 'pk_membre', 
         'profil_apm': 'Expert',
-        'specific_columns': ['SocieteFacturation', 'TypeTVA', 'IdTVAInter', 'accounting__vat_international', 'Id Permanent', 'IdExpert']
+        'specific_columns': ['SocieteFacturation', 'TypeTVA', 'IdTVAInter', 'accounting__vat_international', 'Id Permanent', 'IdExpert', "Statut expert" ]
     },
     'permanent': {
         'pk': 'PKPermanent', 
         'hubspot_pk': 'pk_membre', 
         'profil_apm': 'Permanent',
-        'specific_columns': ['Id']
+        'specific_columns': ['Id', "StatutCycle", ]
     }, 
     'referent': {
         'pk': 'PKReferent', 
         'hubspot_pk': 'pk_membre', 
         'profil_apm': 'Référent',
-        'specific_columns': ['Id']
+        'specific_columns': ['Id', "StatutCycle", ]
     },
     'adherent_actif': {
         'pk': 'PKAdherent', 
         'hubspot_pk': 'pk_membre', 
         'profil_apm': 'Adhérent',
         'specific_columns': ['active_subscription__signed_cpp__filename', 'active_subscription__signed_cpp__date', 
-                           'active_subscription__signed_cpp__asset_filename', 'active_subscription__signed_cpp__url', 'FK_Societe', 'Id']
+                           'active_subscription__signed_cpp__asset_filename', 'active_subscription__signed_cpp__url', 'FK_Societe', 'Id', 'leader_status__value', "StatutCycle" ]
     }
 }
 
 # colonnes communes
 BASE_COLUMNS = [
-    'Email', 'Civilite', 'Nom', 'Prenom', 'Statut expert', 'Tel', 'Portable',
-    'Pays', 'Ville', 'CP', 'Adresse', 'Nationalite', 'Date_naissance', 'Dept', 'StatutPro', 'Club',
+    'Email', 'Civilite', 'Nom', 'Prenom', 'Tel', 'Portable',
+    'Pays', 'Ville', 'CP', 'Adresse', 'Nationalite', 'Date_naissance', 'Dept', 'StatutPro', 'Club', "Cible APM",
     'FlagCoordinateur', 'FlagExpert', 'FlagAnimateur', 
     'FlagPermanent', 'FlagReferent', 'FlagActif', 'FlagMembre', 'DernDateEntree', 
-    'subscriber_info__status__value', 'active_subscription__club_info__name'
+    'subscriber_info__status__value', 'active_subscription__club_info__name',
 ]
 
 def convert_date_for_hubspot(date_value):
@@ -72,9 +72,9 @@ def convert_to_boolean(value):
         return ""
     
     value_str = str(value).lower().strip()
-    if value_str in ['true', '1', 'yes', 'oui', 'vrai']:
+    if value_str in ['true', '1', 'yes', 'oui', 'vrai', 't']:
         return True
-    elif value_str in ['false', '0', 'no', 'non', 'faux']:
+    elif value_str in ['false', '0', 'no', 'non', 'faux', 'f']:
         return False
     else:
         return ""
@@ -146,16 +146,25 @@ def process_file(file_type):
     try:
         df = pd.read_csv(input_file)
         
+        # Nettoyer les noms de colonnes
+        df.columns = df.columns.str.strip()
+        df = df.rename(columns={' CibleAPM': 'Cible APM', 'CibleAPM': 'Cible APM'})
+        
         if 'Prénom' in df.columns:
             df = df.rename(columns={'Prénom': 'Prenom'})
         
         # inclure les colonnes de base + PK + colonnes spécifiques
         columns_to_keep = [config['pk']] + BASE_COLUMNS + config.get('specific_columns', [])
 
-        if file_type == 'expert' and 'Statut expert' not in df.columns:
-            print("Attention: colonne 'Statut expert' manquante dans le fichier expert")
+        print(f"Colonnes dans le fichier source : {list(df.columns)}")
+        print(f"'Cible APM' dans le fichier ? {'Cible APM' in df.columns}")
+        print(f"Colonnes à garder : {columns_to_keep}")
 
         available_columns = [col for col in columns_to_keep if col in df.columns]
+        print(f"Colonnes disponibles : {available_columns}")
+        
+        if 'Cible APM' in df.columns and 'Cible APM' not in available_columns:
+            available_columns.append('Cible APM')
         df_filtered = df[available_columns]
         
         processed_data = []
@@ -165,7 +174,7 @@ def process_file(file_type):
             for column in available_columns:
                 value = row[column] if pd.notna(row[column]) else ""
                 
-                if column.startswith('Flag'):
+                if column.startswith('Flag') or column == 'Cible APM':
                     data[column] = convert_to_boolean(value)
                 elif column == 'Civilite':
                     data[column] = convert_civilite(value)
@@ -181,8 +190,9 @@ def process_file(file_type):
                     data[column] = str(value).strip() if value else ""
                 else:
                     data[column] = str(value).strip() if value else ""
+               
             
-            # ➡️ Ajout des colonnes PK
+            #ajout des colonnes PK
             data['pk_membre'] = data[config['pk']]
             role_property = f"pk_{file_type}" if file_type != "adherent_actif" else "pk_adherent"
             data[role_property] = data[config['pk']]
@@ -238,6 +248,7 @@ def upload_to_hubspot(csv_file_path, file_type, config):
             {"columnObjectTypeId": "0-1", "columnName": "Dept", "propertyName": "departement"},
             {"columnObjectTypeId": "0-1", "columnName": "StatutPro", "propertyName": "statut_professionnel"},
             {"columnObjectTypeId": "0-1", "columnName": "Club", "propertyName": "club"},
+            {"columnObjectTypeId": "0-1", "columnName": "Cible APM", "propertyName": "cible_apm"},
             {"columnObjectTypeId": "0-1", "columnName": "FlagCoordinateur", "propertyName": "flag_coordinateur"},
             {"columnObjectTypeId": "0-1", "columnName": "FlagExpert", "propertyName": "flag_expert"},
             {"columnObjectTypeId": "0-1", "columnName": "FlagAnimateur", "propertyName": "flag_animateur"},
@@ -260,17 +271,19 @@ def upload_to_hubspot(csv_file_path, file_type, config):
                 {"columnObjectTypeId": "0-1", "columnName": "TypeTVA", "propertyName": "type_tva"},
                 {"columnObjectTypeId": "0-1", "columnName": "IdTVAInter", "propertyName": "id_tva_inter"},
                 {"columnObjectTypeId": "0-1", "columnName": "accounting__vat_international", "propertyName": "expert_comptabilite_tva_international"},
-                {"columnObjectTypeId": "0-1", "columnName": "Id Permanent", "propertyName": "id_permanent"}
+                {"columnObjectTypeId": "0-1", "columnName": "Id Permanent", "propertyName": "id_permanent"},
             ])
         
         elif file_type == 'permanent':
             mappings.extend([
                 {"columnObjectTypeId": "0-1", "columnName": "Id", "propertyName": "next_apm_id"},
+                {"columnObjectTypeId": "0-1", "columnName": "StatutCycle", "propertyName": "statut_next_apm"},
             ])
 
         elif file_type == 'referent':
             mappings.extend([
                 {"columnObjectTypeId": "0-1", "columnName": "Id", "propertyName": "next_apm_id"},
+                {"columnObjectTypeId": "0-1", "columnName": "StatutCycle", "propertyName": "statut_next_apm"},
             ])
         
         elif file_type == 'adherent_actif':
@@ -280,7 +293,9 @@ def upload_to_hubspot(csv_file_path, file_type, config):
                 {"columnObjectTypeId": "0-1", "columnName": "active_subscription__signed_cpp__date", "propertyName": "active_subscription_signed_cpp_date"},
                 {"columnObjectTypeId": "0-1", "columnName": "active_subscription__signed_cpp__asset_filename", "propertyName": "active_subscription_signed_cpp_asset_filename"},
                 {"columnObjectTypeId": "0-1", "columnName": "active_subscription__signed_cpp__url", "propertyName": "active_subscription_signed_cpp_url"},
-                {"columnObjectTypeId": "0-1", "columnName": "FK_Societe", "propertyName": "key_entreprise"}
+                {"columnObjectTypeId": "0-1", "columnName": "FK_Societe", "propertyName": "key_entreprise"},
+                {"columnObjectTypeId": "0-1", "columnName": "leader_status__value", "propertyName": "job_function"},
+                {"columnObjectTypeId": "0-1", "columnName": "StatutCycle", "propertyName": "statut_next_apm"},
             ])
         
         payload = {

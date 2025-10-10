@@ -26,12 +26,15 @@ COMPANY_COLUMNS = [
     'Region',
     'IdEffectif',      
     'Effectif', 
+    'IDRevenue',
     'Revenue',      
     'SIRET',          
     'SIREN',         
     'TVA',            
     'TVAInter',     
-    'TVAOption',    
+    'TVAOption',
+    'IDDeadline',  
+    'Deadline',  
     'IdMode',       
     'Mode',
     'TiersPayeur'         
@@ -57,6 +60,8 @@ def clean_company_data(df):
             
             if column == 'Pays':  
                 data[column] = convert_country_for_company(value)
+            elif column == 'Deadline':  # ← Ajout de cette condition
+                data[column] = convert_deadline(value)
             elif column in ['Effectif', 'IdMode', 'IdEffectif']:  
                 try:
                     data[column] = int(float(value)) if value and str(value).replace('.', '').isdigit() else ""
@@ -73,6 +78,30 @@ def clean_company_data(df):
         processed_data.append(data)
     
     return pd.DataFrame(processed_data)
+
+def convert_deadline(value):
+    if not value or pd.isna(value):
+        return ""
+    
+    value_clean = str(value).strip()
+    
+    #mapping des valeurs
+    mapping = {
+        '30 jours net virement SEPA': '30JN',
+        '60 jours net virement SEPA': '60JN',
+        '60 jours net': '60JN',
+        'Anim / Experts': 'Anim / Experts'
+    }
+    
+    if value_clean in mapping:
+        return mapping[value_clean]
+    
+    for key, mapped_value in mapping.items():
+        if value_clean.lower() == key.lower():
+            return mapped_value
+    
+    return value_clean
+
 
 def process_companies():
     input_file = '/root/apm/infocentre/apm-export-tables-back/exports/dwh.mv_societe.csv'
@@ -197,6 +226,11 @@ def upload_companies_to_hubspot(csv_file_path, available_columns):
                             },
                             {
                                 "columnObjectTypeId": "0-2",
+                                "columnName": "IDRevenue",
+                                "propertyName": "id_revenue"
+                            },
+                            {
+                                "columnObjectTypeId": "0-2",
                                 "columnName": "Revenue",
                                 "propertyName": "chiffres_affaires"
                             },
@@ -224,6 +258,16 @@ def upload_companies_to_hubspot(csv_file_path, available_columns):
                                 "columnObjectTypeId": "0-2",
                                 "columnName": "TVAOption",
                                 "propertyName": "tva_option"
+                            },
+                            {
+                                "columnObjectTypeId": "0-2",
+                                "columnName": "IDDeadline",
+                                "propertyName": "id_deadline"
+                            },
+                            {
+                                "columnObjectTypeId": "0-2",
+                                "columnName": "Deadline",
+                                "propertyName": "ech_ancement" 
                             },
                             {
                                 "columnObjectTypeId": "0-2",

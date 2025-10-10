@@ -170,8 +170,9 @@ def import_to_hubdb(temp_file):
     config = {
         "skipRows": 1,
         "separator": ",",
-        "resetTable": True,
+        "resetTable": False,
         "encoding": "utf-8",
+        "preserveHubspotValues": True,
         "format": "csv",
         "idSourceColumn": 1,
         "columnMappings": [

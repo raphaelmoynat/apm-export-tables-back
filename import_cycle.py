@@ -35,6 +35,7 @@ TRANSACTION_COLUMNS = [
     'Id_Membre',
     'Membre_Nom',
     'Membre_Type',
+    'Id_Taux',
     'Taux',
     'Id_Proba_renew',
     'Proba_renew',
@@ -105,9 +106,9 @@ def clean_transaction_data(df):
                     data[column] = ""
             
             elif column in ['FlagActif']:
-                if str(value).lower() in ['true', '1', 'yes', 'oui', 'vrai', '1.0']:
+                if str(value).lower() in ['true', '1', 'yes', 'oui', 'vrai', '1.0', 't']:
                     data[column] = True
-                elif str(value).lower() in ['false', '0', 'no', 'non', 'faux', '0.0']:
+                elif str(value).lower() in ['false', '0', 'no', 'non', 'faux', '0.0', 'f']:
                     data[column] = False
                 else:
                     data[column] = ""
@@ -175,6 +176,8 @@ def normalize_boolean(value):
         'oui': 'Oui',
         'vrai': 'Oui',
         'false': 'Non',
+        'f': 'Non',
+        't': 'Oui',
         'no': 'Non',
         'non': 'Non',
         'faux': 'Non'
@@ -189,10 +192,13 @@ def convert_date_to_hubspot_format(date_string, field_type="datetime"):
     try:
         date_string = str(date_string).strip()
         
+        if date_string.endswith('+00'):
+            date_string = date_string[:-3] + '+00:00'
+        
         #formats de date supportés
         date_formats = [
+            '%Y-%m-%d %H:%M:%S+00:00',  
             '%Y-%m-%d %H:%M:%S%z',
-            '%Y-%m-%d %H:%M:%S+00:00',
             '%Y-%m-%d %H:%M:%S',
             '%Y-%m-%d',
             '%d/%m/%Y %H:%M:%S',
@@ -206,6 +212,12 @@ def convert_date_to_hubspot_format(date_string, field_type="datetime"):
                 if date_format == '%Y-%m-%d':
                     date_obj = datetime.strptime(date_string, date_format)
                     date_obj = date_obj.replace(hour=0, minute=0, second=0, tzinfo=timezone.utc)
+                elif '%z' in date_format or '+00:00' in date_format:
+                    # Pour les dates avec timezone
+                    date_obj = datetime.strptime(date_string, date_format)
+                    # Si pas de timezone info, ajouter UTC
+                    if date_obj.tzinfo is None:
+                        date_obj = date_obj.replace(tzinfo=timezone.utc)
                 else:
                     date_obj = datetime.strptime(date_string, date_format)
                     if date_obj.tzinfo is None:
@@ -227,6 +239,7 @@ def convert_date_to_hubspot_format(date_string, field_type="datetime"):
     except Exception as e:
         print(f"Erreur conversion date {date_string}: {e}")
         return ""
+
 
 def process_transactions():
     input_file = '/root/apm/infocentre/apm-export-tables-back/exports/dwh.mv_cycle.csv'
@@ -390,6 +403,11 @@ def upload_transactions_to_hubspot(csv_file_path, available_columns):
                                 "columnObjectTypeId": "0-3",
                                 "columnName": "Membre_Type",
                                 "propertyName": "type_de_membre"
+                            },
+                            {
+                                "columnObjectTypeId": "0-3",
+                                "columnName": "Id_Taux",
+                                "propertyName": "id_taux"
                             },
                             {
                                 "columnObjectTypeId": "0-3",

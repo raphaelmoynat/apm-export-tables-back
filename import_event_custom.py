@@ -14,12 +14,12 @@ HUBSPOT_IMPORT_API_URL = 'https://api.hubapi.com/crm/v3/imports'
 
 # colonnes à traiter du fichier csv
 EVENT_COLUMNS = [
-    'pk_evt', 'IdEvt', 'IdInter', 'Nom', 'IdTypeEvt', 'TypeEvt', 'Date',
-    'TypePresence', 'DateAnnulation', 'Ordre', 'Format', 'NbAdherents',
-    'NbInvites', 'NbParticipants', 'TxPresence', 'TxPresence2', 'IdStatut',
+    'pk_evt', 'IdEvt', 'IdInter', 'Nom', 'IdTypeEvt', 'TypeEvt', 'Date', 'IdTypePresence',
+    'TypePresence', 'DateAnnulation', 'IdFormat', 'Ordre', 'Format', 'NbAdherents',
+    'NbInvites', 'NbParticipants', 'NbPresents', 'NbPresents2', 'TxPresence', 'TxPresence2', 'IdStatut',
     'Statut', 'SatisfactionGlobale', 'SatisfactionGlobale2', 'SatisfactionGlobale3',
-    'NbEvaluations', 'Adresse', 'Pays', 'Region', 'LieuEvt', 'Dept', 'Ville',
-    'ZIP', 'Annulation', 'IdModePaiement', 'ModePaiement', 'Date_Creation', 'Date_MAJ'
+    'NbEvaluations', 'Adresse', 'Pays', 'Region', 'LieuEvt', 'NumDept', 'Dept', 'Ville',
+    'ZIP', 'IdAnnulation', 'Annulation', 'Timzeone', 'IdModePaiement', 'ModePaiement', 'Date_Creation', 'Date_MAJ'
 ]
 
 # correspondance csv -> hubspot
@@ -31,13 +31,17 @@ columns_mapping = {
     'IdTypeEvt': 'id_type_d_evenement',
     'TypeEvt': 'type_d_evenement',
     'Date': 'start_datetime',
+    'IdTypePresence': 'idtypepresence',
     'TypePresence': 'type_de_presence',
     'DateAnnulation': 'date_annulation',
+    'IdFormat': 'idformat',
     'Ordre':'ordre_du_jour',
     'Format': 'format',
     'NbAdherents': 'nombre_d_adherents',
     'NbInvites': 'nombre_d_invites_nb',
     'NbParticipants': 'nombre_de_participants_nb',
+    'NbPresents': 'nombre_de_presents',
+    'NbPresents2': 'nombre_de_presents_2',
     'TxPresence': 'taux_de_presence_nb',
     'TxPresence2': 'taux_de_presence_2',
     'IdStatut': 'id_statut_de_l_evenement',
@@ -50,10 +54,13 @@ columns_mapping = {
     'Pays': 'pays_de_l_evenement',
     'Region': 'region_de_l_evenement',
     'LieuEvt': 'lieu_de_l_evenement',
+    'NumDept': 'n_departement',
     'Dept': "departement",
     'Ville': 'ville_de_l_evenement',
     'ZIP': 'code_postal_de_l_evenement',
+    'IdAnnulation': 'id_annulation',
     'Annulation': 'motif_d_annulation',
+    'Timzeone': 'fuseau_horaire',
     'IdModePaiement': 'id_mode_paiement',
     'ModePaiement': 'mode_paiement',
     'Date_Creation': 'createdat',
@@ -92,10 +99,13 @@ def convert_date_to_timestamp(date_string):
     try:
         date_string = str(date_string).strip()
         
+        if date_string.endswith('+00'):
+            date_string = date_string[:-3] + '+00:00'
+        
         #différents formats de date
         date_formats = [
-            '%Y-%m-%d %H:%M:%S%z',      
             '%Y-%m-%d %H:%M:%S+00:00',  
+            '%Y-%m-%d %H:%M:%S%z',      
             '%Y-%m-%d %H:%M:%S',
             '%Y-%m-%d',
             '%d/%m/%Y %H:%M:%S',
@@ -107,7 +117,7 @@ def convert_date_to_timestamp(date_string):
             try:
                 if date_format == '%Y-%m-%d':
                     date_obj = datetime.strptime(date_string, date_format)
-                    date_obj = date_obj.replace(hour=9, minute=0, second=0, tzinfo=timezone.utc)  # 9h par défaut
+                    date_obj = date_obj.replace(hour=9, minute=0, second=0, tzinfo=timezone.utc)
                 elif '%z' in date_format or '+00:00' in date_format:
                     date_obj = datetime.strptime(date_string, date_format)
                     if date_obj.tzinfo is None:
@@ -285,23 +295,34 @@ def upload_to_hubspot(csv_file_path, available_columns):
             }]
         }
         
+        json_payload = json.dumps(payload)
+
         # envoyer vers hubspot
         with open(csv_file_path, 'rb') as csv_file:
             files = {'files': ('dwh_evenement_filtered.csv', csv_file, 'text/csv')}
-            data = {'importRequest': json.dumps(payload)}
+            data = {'importRequest': json_payload}
             
             response = requests.post(HUBSPOT_IMPORT_API_URL, headers=headers, files=files, data=data)
             
             if response.status_code == 200:
-                print("upload réussi")
+                result = response.json()
+                print(f"✅ Upload réussi - ID: {result.get('id', 'N/A')}")
                 return True
             else:
-                print(f"erreur upload: {response.status_code}")
+                print(f"❌ Erreur upload: {response.status_code}")
+                try:
+                    error_data = response.json()
+                    print(f"🔍 Détails de l'erreur: {json.dumps(error_data, indent=2)}")
+                except:
+                    print(f"🔍 Réponse brute: {response.text}")
                 return False
                 
     except Exception as e:
-        print(f"erreur upload: {e}")
+        print(f"❌ Erreur upload: {e}")
+        import traceback
+        traceback.print_exc()
         return False
+
 
 def main():
     if not os.path.exists(output_dir):
